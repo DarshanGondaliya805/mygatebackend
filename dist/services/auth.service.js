@@ -9,7 +9,7 @@ const models_1 = require("../models");
 const jwt_1 = require("../utils/jwt");
 const error_middleware_1 = require("../middlewares/error.middleware");
 class AuthService {
-    async login(identifier, password) {
+    async login(identifier, password, fcmToken) {
         const identify = String(identifier).trim();
         const user = await models_1.User.unscoped().findOne({
             where: {
@@ -32,8 +32,11 @@ class AuthService {
         };
         const accessToken = (0, jwt_1.generateAccessToken)(payload);
         const refreshToken = (0, jwt_1.generateRefreshToken)(payload);
-        // Store hashed refresh token
-        await user.update({ refresh_token: refreshToken, last_login: new Date() });
+        await user.update({
+            refresh_token: refreshToken,
+            last_login: new Date(),
+            ...(fcmToken ? { fcm_token: fcmToken } : {}),
+        });
         const { id, uuid, name, email, phone, role } = user.dataValues;
         return { accessToken, refreshToken, user: { id, uuid, name: name ?? '', email: email ?? '', phone: phone ?? '', role } };
     }
@@ -56,7 +59,7 @@ class AuthService {
         return { accessToken, refreshToken };
     }
     async logout(userId) {
-        await models_1.User.update({ refresh_token: null }, { where: { id: userId } });
+        await models_1.User.update({ refresh_token: null, fcm_token: null }, { where: { id: userId } });
     }
     async changePassword(userId, oldPassword, newPassword) {
         const user = await models_1.User.unscoped().findByPk(userId);

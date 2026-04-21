@@ -9,8 +9,9 @@ const response_1 = require("../utils/response");
 class AuthController {
     async login(req, res, next) {
         try {
-            const { identifier, password } = req.body;
-            const result = await auth_service_1.default.login(identifier, password);
+            const { identifier, password, fcm_token } = req.body;
+            console.log(fcm_token, "lllllllllll");
+            const result = await auth_service_1.default.login(identifier, password, fcm_token);
             (0, response_1.sendSuccess)(res, 'Login successful', result);
         }
         catch (err) {

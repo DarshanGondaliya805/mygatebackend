@@ -8,6 +8,7 @@ const models_1 = require("../models");
 const response_1 = require("../utils/response");
 const upload_1 = require("../utils/upload");
 const notification_service_1 = __importDefault(require("../services/notification.service"));
+const queryId = (req) => req.user.role === 'super_admin' ? req.query.society_id : req.user.society_id;
 class ComplaintController {
     async create(req, res, next) {
         try {
@@ -15,17 +16,18 @@ class ComplaintController {
             const images = req.files
                 ? req.files.map((f) => (0, upload_1.getRelativePath)(f.path))
                 : null;
+            const societyId = req.user.society_id;
             const complaint = await models_1.Complaint.create({
                 title, description, category,
                 priority: priority || 'medium',
                 images,
                 raised_by: req.user.id,
                 flat_id: req.user.dbUser?.flat_id || null,
-                society_id: req.user.society_id,
+                society_id: societyId,
             });
             // Notify society admins
             const admins = await models_1.User.findAll({
-                where: { society_id: req.user.society_id, role: ['admin', 'super_admin'], is_active: true },
+                where: { society_id: societyId, role: ['admin', 'super_admin'], is_active: true },
                 attributes: ['id'],
             });
             await notification_service_1.default.sendToMany(admins.map((a) => a.id), {
@@ -75,7 +77,10 @@ class ComplaintController {
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 20;
             const { status, category } = req.query;
-            const where = { society_id: req.user.society_id };
+            const where = {};
+            const sid = queryId(req);
+            if (sid)
+                where.society_id = sid;
             // Regular users see only their own complaints
             if (req.user.role === 'user') {
                 where.raised_by = req.user.id;

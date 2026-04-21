@@ -1,5 +1,5 @@
 export declare class AuthService {
-    login(identifier: string, password: string): Promise<{
+    login(identifier: string, password: string, fcmToken?: string): Promise<{
         accessToken: string;
         refreshToken: string;
         user: {

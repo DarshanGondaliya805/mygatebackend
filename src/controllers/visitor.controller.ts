@@ -6,6 +6,9 @@ import { sendSuccess, sendCreated, sendNotFound, getPagination, getPaginationMet
 import { getRelativePath } from '../utils/upload';
 import notificationService from '../services/notification.service';
 
+const bodyId = (req: AuthRequest): number => req.user!.role === 'super_admin' ? req.body.society_id : req.user!.society_id!;
+const queryId = (req: AuthRequest): number | undefined => req.user!.role === 'super_admin' ? (req.query.society_id as any) : req.user!.society_id!;
+
 export class VisitorController {
   // Security: create visitor entry
   async create(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -16,10 +19,11 @@ export class VisitorController {
       } = req.body;
 
       const image = req.file ? getRelativePath(req.file.path) : null;
+      const societyId = bodyId(req);
 
       // Check if visitor has visited before (by phone)
       const existing = await Visitor.findOne({
-        where: { phone, society_id: req.user!.society_id! },
+        where: { phone, society_id: societyId },
         order: [['createdAt', 'DESC']],
       });
 
@@ -36,7 +40,7 @@ export class VisitorController {
         visitor_type,
         vehicle_number: vehicle_number || null,
         flat_id,
-        society_id: req.user!.society_id!,
+        society_id: societyId,
         created_by: req.user!.id,
         status: is_pre_approved ? 'approved' : 'pending',
         purpose: purpose || null,
@@ -67,7 +71,7 @@ export class VisitorController {
   // User: approve or reject visitor
   async updateStatus(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { status } = req.body; // 'approved' | 'rejected'
+      const { status } = req.body;
       const visitor = await Visitor.findByPk(req.params.id);
       if (!visitor) { sendNotFound(res, 'Visitor not found'); return; }
 
@@ -111,8 +115,11 @@ export class VisitorController {
   async getByPhone(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { phone } = req.params;
+      const where: any = { phone };
+      const sid = queryId(req);
+      if (sid) where.society_id = sid;
       const visitor = await Visitor.findOne({
-        where: { phone, society_id: req.user!.society_id! },
+        where,
         order: [['createdAt', 'DESC']],
         attributes: ['name', 'phone', 'image', 'vehicle_number'],
       });
@@ -128,7 +135,9 @@ export class VisitorController {
       const limit = parseInt(req.query.limit as string) || 20;
       const { visitor_type, status, flat_id, date } = req.query;
 
-      const where: any = { society_id: req.user!.society_id };
+      const where: any = {};
+      const sid = queryId(req);
+      if (sid) where.society_id = sid;
 
       // Regular users only see their flat's visitors
       if (req.user!.role === 'user') {
@@ -171,7 +180,7 @@ export class VisitorController {
         name, phone, visitor_type,
         vehicle_number: vehicle_number || null,
         flat_id: req.user!.dbUser?.flat_id,
-        society_id: req.user!.society_id!,
+        society_id: bodyId(req),
         host_user_id: req.user!.id,
         status: 'approved',
         is_pre_approved: true,

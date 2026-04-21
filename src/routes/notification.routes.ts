@@ -6,6 +6,20 @@ import { sendSuccess, sendNotFound } from '../utils/response';
 const router = Router();
 router.use(authenticate);
 
+// POST /notifications/test — send a test notification to yourself
+router.post('/test', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { title = 'Test Notification', body = 'If you see this, notifications are working!' } = req.body;
+    await notificationService.send({
+      user_id: req.user!.id,
+      title,
+      body,
+      type: 'other',
+    });
+    sendSuccess(res, 'Test notification sent', { user_id: req.user!.id, title, body });
+  } catch (err) { next(err); }
+});
+
 // GET /notifications?page=1&limit=20&unread=true
 router.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {

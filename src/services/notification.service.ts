@@ -1,6 +1,7 @@
 import { Notification, User } from '../models';
 import { NotificationType } from '../models/Notification';
 import logger from '../utils/logger';
+import admin from '../config/firebase';
 
 interface SendNotificationPayload {
   user_id: number;
@@ -41,11 +42,13 @@ export class NotificationService {
   }
 
   private async sendFCM(token: string, title: string, body: string): Promise<void> {
-    // Firebase Admin SDK integration point
-    // Uncomment and configure once Firebase is set up:
-    // import admin from 'firebase-admin';
-    // await admin.messaging().send({ token, notification: { title, body } });
-    logger.info(`[FCM] Would send to token ${token.substring(0, 10)}...: ${title}`);
+    await admin.messaging().send({
+      token,
+      notification: { title, body },
+      android: { priority: 'high' },
+      apns: { payload: { aps: { sound: 'default' } } },
+    });
+    logger.info(`[FCM] Sent to token ${token.substring(0, 10)}...: ${title}`);
   }
 
   async getAll(userId: number, page = 1, limit = 20, unreadOnly = false) {

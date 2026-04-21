@@ -4,6 +4,8 @@ exports.amenityController = exports.policyController = exports.serviceContactCon
 const models_1 = require("../models");
 const response_1 = require("../utils/response");
 const upload_1 = require("../utils/upload");
+const bodyId = (req) => req.user.role === 'super_admin' ? req.body.society_id : req.user.society_id;
+const queryId = (req) => req.user.role === 'super_admin' ? req.query.society_id : req.user.society_id;
 // ─── Staff Controller ─────────────────────────────────────────────────────────
 class StaffController {
     async create(req, res, next) {
@@ -20,9 +22,7 @@ class StaffController {
                 address, documents, image,
                 password: password || null,
                 joining_date: joining_date || null,
-                society_id: req.user.role === 'super_admin'
-                    ? (req.body.society_id || req.user.society_id)
-                    : req.user.society_id,
+                society_id: bodyId(req),
                 created_by: req.user.id,
             });
             (0, response_1.sendCreated)(res, 'Staff created', staff);
@@ -35,7 +35,10 @@ class StaffController {
         try {
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 20;
-            const where = { society_id: req.user.society_id };
+            const where = {};
+            const sid = queryId(req);
+            if (sid)
+                where.society_id = sid;
             if (req.query.staff_type)
                 where.staff_type = req.query.staff_type;
             const { count, rows } = await models_1.Staff.findAndCountAll({
@@ -114,7 +117,7 @@ class DailyHelperController {
                 allowed_time_end: allowed_time_end || null,
                 user_id: req.user.id,
                 flat_id: req.user.dbUser?.flat_id,
-                society_id: req.user.society_id,
+                society_id: bodyId(req),
             });
             (0, response_1.sendCreated)(res, 'Daily helper added', helper);
         }
@@ -138,8 +141,12 @@ class DailyHelperController {
         try {
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 20;
+            const where = {};
+            const sid = queryId(req);
+            if (sid)
+                where.society_id = sid;
             const { count, rows } = await models_1.DailyHelper.findAndCountAll({
-                where: { society_id: req.user.society_id },
+                where,
                 ...(0, response_1.getPagination)(page, limit),
                 order: [['name', 'ASC']],
             });
@@ -154,7 +161,7 @@ class DailyHelperController {
             const { daily_helper_id } = req.body;
             const log = await models_1.HelperEntryLog.create({
                 daily_helper_id,
-                society_id: req.user.society_id,
+                society_id: bodyId(req),
                 in_time: new Date(),
                 created_by: req.user.id,
             });
@@ -194,7 +201,7 @@ class EventController {
                 start_time: new Date(start_time),
                 end_time: end_time ? new Date(end_time) : null,
                 category: category || 'other',
-                society_id: req.user.society_id,
+                society_id: bodyId(req),
                 created_by: req.user.id,
             });
             (0, response_1.sendCreated)(res, 'Event created', event);
@@ -207,8 +214,12 @@ class EventController {
         try {
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 20;
+            const where = { is_active: true };
+            const sid = queryId(req);
+            if (sid)
+                where.society_id = sid;
             const { count, rows } = await models_1.Event.findAndCountAll({
-                where: { society_id: req.user.society_id, is_active: true },
+                where,
                 ...(0, response_1.getPagination)(page, limit),
                 order: [['start_time', 'ASC']],
             });
@@ -257,7 +268,7 @@ class ServiceContactController {
             const contact = await models_1.ServiceContact.create({
                 name, phone, alternate_phone: alternate_phone || null,
                 service_type, description: description || null,
-                society_id: req.user.society_id,
+                society_id: bodyId(req),
                 created_by: req.user.id,
             });
             (0, response_1.sendCreated)(res, 'Service contact added', contact);
@@ -268,7 +279,10 @@ class ServiceContactController {
     }
     async getAll(req, res, next) {
         try {
-            const where = { society_id: req.user.society_id, is_active: true };
+            const where = { is_active: true };
+            const sid = queryId(req);
+            if (sid)
+                where.society_id = sid;
             if (req.query.service_type)
                 where.service_type = req.query.service_type;
             const contacts = await models_1.ServiceContact.findAll({ where, order: [['name', 'ASC']] });
@@ -315,7 +329,7 @@ class PolicyController {
             const { title, description, category } = req.body;
             const policy = await models_1.SocietyPolicy.create({
                 title, description, category: category || 'general',
-                society_id: req.user.society_id,
+                society_id: bodyId(req),
                 created_by: req.user.id,
             });
             (0, response_1.sendCreated)(res, 'Policy created', policy);
@@ -326,8 +340,12 @@ class PolicyController {
     }
     async getAll(req, res, next) {
         try {
+            const where = { is_active: true };
+            const sid = queryId(req);
+            if (sid)
+                where.society_id = sid;
             const policies = await models_1.SocietyPolicy.findAll({
-                where: { society_id: req.user.society_id, is_active: true },
+                where,
                 order: [['createdAt', 'DESC']],
             });
             (0, response_1.sendSuccess)(res, 'Policies fetched', policies);
@@ -375,7 +393,7 @@ class AmenityController {
             const amenity = await models_1.Amenity.create({
                 name, description: description || null, category: category || 'common',
                 timing_open: timing_open || null, timing_close: timing_close || null,
-                image, society_id: req.user.society_id,
+                image, society_id: bodyId(req),
                 created_by: req.user.id,
             });
             (0, response_1.sendCreated)(res, 'Amenity added', amenity);
@@ -386,8 +404,12 @@ class AmenityController {
     }
     async getAll(req, res, next) {
         try {
+            const where = { is_active: true };
+            const sid = queryId(req);
+            if (sid)
+                where.society_id = sid;
             const amenities = await models_1.Amenity.findAll({
-                where: { society_id: req.user.society_id, is_active: true },
+                where,
                 order: [['name', 'ASC']],
             });
             (0, response_1.sendSuccess)(res, 'Amenities fetched', amenities);

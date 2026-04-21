@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.NotificationService = void 0;
 const models_1 = require("../models");
 const logger_1 = __importDefault(require("../utils/logger"));
+const firebase_1 = __importDefault(require("../config/firebase"));
 class NotificationService {
     async send(payload) {
         // Save to DB
@@ -34,11 +35,13 @@ class NotificationService {
         await Promise.allSettled(userIds.map((id) => this.send({ ...payload, user_id: id })));
     }
     async sendFCM(token, title, body) {
-        // Firebase Admin SDK integration point
-        // Uncomment and configure once Firebase is set up:
-        // import admin from 'firebase-admin';
-        // await admin.messaging().send({ token, notification: { title, body } });
-        logger_1.default.info(`[FCM] Would send to token ${token.substring(0, 10)}...: ${title}`);
+        await firebase_1.default.messaging().send({
+            token,
+            notification: { title, body },
+            android: { priority: 'high' },
+            apns: { payload: { aps: { sound: 'default' } } },
+        });
+        logger_1.default.info(`[FCM] Sent to token ${token.substring(0, 10)}...: ${title}`);
     }
     async getAll(userId, page = 1, limit = 20, unreadOnly = false) {
         const where = { user_id: userId };

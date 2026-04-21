@@ -4,7 +4,7 @@ import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '.
 import { AppError } from '../middlewares/error.middleware';
 
 export class AuthService {
-  async login(identifier: string, password: string) {
+  async login(identifier: string, password: string, fcmToken?: string) {
     const identify = String(identifier).trim();
     const user = await User.unscoped().findOne({
       where: {
@@ -29,8 +29,11 @@ export class AuthService {
     const accessToken = generateAccessToken(payload);
     const refreshToken = generateRefreshToken(payload);
 
-    // Store hashed refresh token
-    await user.update({ refresh_token: refreshToken, last_login: new Date() });
+    await user.update({
+      refresh_token: refreshToken,
+      last_login: new Date(),
+      ...(fcmToken ? { fcm_token: fcmToken } : {}),
+    });
 
     const { id, uuid, name, email, phone, role } = (user as any).dataValues;
 
@@ -62,7 +65,7 @@ export class AuthService {
   }
 
   async logout(userId: number) {
-    await User.update({ refresh_token: null }, { where: { id: userId } });
+    await User.update({ refresh_token: null, fcm_token: null }, { where: { id: userId } });
   }
 
   async changePassword(userId: number, oldPassword: string, newPassword: string) {

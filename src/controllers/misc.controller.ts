@@ -4,6 +4,9 @@ import { Staff, DailyHelper, HelperEntryLog, Event, ServiceContact, SocietyPolic
 import { sendSuccess, sendCreated, sendNotFound, getPagination, getPaginationMeta } from '../utils/response';
 import { getRelativePath } from '../utils/upload';
 
+const bodyId = (req: AuthRequest): number => req.user!.role === 'super_admin' ? req.body.society_id : req.user!.society_id!;
+const queryId = (req: AuthRequest): number | undefined => req.user!.role === 'super_admin' ? (req.query.society_id as any) : req.user!.society_id!;
+
 // ─── Staff Controller ─────────────────────────────────────────────────────────
 export class StaffController {
   async create(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -21,9 +24,7 @@ export class StaffController {
         address, documents, image,
         password: password || null,
         joining_date: joining_date || null,
-        society_id: req.user!.role === 'super_admin'
-          ? (req.body.society_id || req.user!.society_id!)
-          : req.user!.society_id!,
+        society_id: bodyId(req),
         created_by: req.user!.id,
       });
       sendCreated(res, 'Staff created', staff);
@@ -34,7 +35,9 @@ export class StaffController {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 20;
-      const where: any = { society_id: req.user!.society_id };
+      const where: any = {};
+      const sid = queryId(req);
+      if (sid) where.society_id = sid;
       if (req.query.staff_type) where.staff_type = req.query.staff_type;
 
       const { count, rows } = await Staff.findAndCountAll({
@@ -96,7 +99,7 @@ export class DailyHelperController {
         allowed_time_end: allowed_time_end || null,
         user_id: req.user!.id,
         flat_id: req.user!.dbUser?.flat_id,
-        society_id: req.user!.society_id!,
+        society_id: bodyId(req),
       });
       sendCreated(res, 'Daily helper added', helper);
     } catch (err) { next(err); }
@@ -116,8 +119,11 @@ export class DailyHelperController {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 20;
+      const where: any = {};
+      const sid = queryId(req);
+      if (sid) where.society_id = sid;
       const { count, rows } = await DailyHelper.findAndCountAll({
-        where: { society_id: req.user!.society_id! },
+        where,
         ...getPagination(page, limit),
         order: [['name', 'ASC']],
       });
@@ -130,7 +136,7 @@ export class DailyHelperController {
       const { daily_helper_id } = req.body;
       const log = await HelperEntryLog.create({
         daily_helper_id,
-        society_id: req.user!.society_id!,
+        society_id: bodyId(req),
         in_time: new Date(),
         created_by: req.user!.id,
       });
@@ -163,7 +169,7 @@ export class EventController {
         start_time: new Date(start_time),
         end_time: end_time ? new Date(end_time) : null,
         category: category || 'other',
-        society_id: req.user!.society_id!,
+        society_id: bodyId(req),
         created_by: req.user!.id,
       });
       sendCreated(res, 'Event created', event);
@@ -174,8 +180,11 @@ export class EventController {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 20;
+      const where: any = { is_active: true };
+      const sid = queryId(req);
+      if (sid) where.society_id = sid;
       const { count, rows } = await Event.findAndCountAll({
-        where: { society_id: req.user!.society_id!, is_active: true },
+        where,
         ...getPagination(page, limit),
         order: [['start_time', 'ASC']],
       });
@@ -211,7 +220,7 @@ export class ServiceContactController {
       const contact = await ServiceContact.create({
         name, phone, alternate_phone: alternate_phone || null,
         service_type, description: description || null,
-        society_id: req.user!.society_id!,
+        society_id: bodyId(req),
         created_by: req.user!.id,
       });
       sendCreated(res, 'Service contact added', contact);
@@ -220,7 +229,9 @@ export class ServiceContactController {
 
   async getAll(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const where: any = { society_id: req.user!.society_id!, is_active: true };
+      const where: any = { is_active: true };
+      const sid = queryId(req);
+      if (sid) where.society_id = sid;
       if (req.query.service_type) where.service_type = req.query.service_type;
       const contacts = await ServiceContact.findAll({ where, order: [['name', 'ASC']] });
       sendSuccess(res, 'Service contacts fetched', contacts);
@@ -253,7 +264,7 @@ export class PolicyController {
       const { title, description, category } = req.body;
       const policy = await SocietyPolicy.create({
         title, description, category: category || 'general',
-        society_id: req.user!.society_id!,
+        society_id: bodyId(req),
         created_by: req.user!.id,
       });
       sendCreated(res, 'Policy created', policy);
@@ -262,8 +273,11 @@ export class PolicyController {
 
   async getAll(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
+      const where: any = { is_active: true };
+      const sid = queryId(req);
+      if (sid) where.society_id = sid;
       const policies = await SocietyPolicy.findAll({
-        where: { society_id: req.user!.society_id!, is_active: true },
+        where,
         order: [['createdAt', 'DESC']],
       });
       sendSuccess(res, 'Policies fetched', policies);
@@ -299,7 +313,7 @@ export class AmenityController {
       const amenity = await Amenity.create({
         name, description: description || null, category: category || 'common',
         timing_open: timing_open || null, timing_close: timing_close || null,
-        image, society_id: req.user!.society_id!,
+        image, society_id: bodyId(req),
         created_by: req.user!.id,
       });
       sendCreated(res, 'Amenity added', amenity);
@@ -308,8 +322,11 @@ export class AmenityController {
 
   async getAll(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
+      const where: any = { is_active: true };
+      const sid = queryId(req);
+      if (sid) where.society_id = sid;
       const amenities = await Amenity.findAll({
-        where: { society_id: req.user!.society_id!, is_active: true },
+        where,
         order: [['name', 'ASC']],
       });
       sendSuccess(res, 'Amenities fetched', amenities);

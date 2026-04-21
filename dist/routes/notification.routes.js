@@ -9,6 +9,22 @@ const notification_service_1 = __importDefault(require("../services/notification
 const response_1 = require("../utils/response");
 const router = (0, express_1.Router)();
 router.use(auth_middleware_1.authenticate);
+// POST /notifications/test — send a test notification to yourself
+router.post('/test', async (req, res, next) => {
+    try {
+        const { title = 'Test Notification', body = 'If you see this, notifications are working!' } = req.body;
+        await notification_service_1.default.send({
+            user_id: req.user.id,
+            title,
+            body,
+            type: 'other',
+        });
+        (0, response_1.sendSuccess)(res, 'Test notification sent', { user_id: req.user.id, title, body });
+    }
+    catch (err) {
+        next(err);
+    }
+});
 // GET /notifications?page=1&limit=20&unread=true
 router.get('/', async (req, res, next) => {
     try {

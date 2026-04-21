@@ -6,8 +6,9 @@ import { sendSuccess, sendCreated, sendError } from '../utils/response';
 export class AuthController {
   async login(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { identifier, password } = req.body;
-      const result = await authService.login(identifier, password);
+      const { identifier, password, fcm_token } = req.body;
+      console.log(fcm_token,"lllllllllll")
+      const result = await authService.login(identifier, password, fcm_token);
       sendSuccess(res, 'Login successful', result);
     } catch (err) {
       next(err);
