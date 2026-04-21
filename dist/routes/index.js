@@ -1,0 +1,31 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_routes_1 = __importDefault(require("./auth.routes"));
+const society_routes_1 = __importDefault(require("./society.routes"));
+const user_routes_1 = __importDefault(require("./user.routes"));
+const visitor_routes_1 = __importDefault(require("./visitor.routes"));
+const complaint_routes_1 = __importDefault(require("./complaint.routes"));
+const notification_routes_1 = __importDefault(require("./notification.routes"));
+const block_flat_routes_1 = require("./block-flat.routes");
+const misc_routes_1 = require("./misc.routes");
+const router = (0, express_1.Router)();
+router.use('/auth', auth_routes_1.default);
+router.use('/societies', society_routes_1.default);
+router.use('/users', user_routes_1.default);
+router.use('/blocks', block_flat_routes_1.blockRouter);
+router.use('/flats', block_flat_routes_1.flatRouter);
+router.use('/visitors', visitor_routes_1.default);
+router.use('/complaints', complaint_routes_1.default);
+router.use('/notifications', notification_routes_1.default);
+router.use('/staff', misc_routes_1.staffRouter);
+router.use('/daily-helpers', misc_routes_1.helperRouter);
+router.use('/events', misc_routes_1.eventRouter);
+router.use('/service-contacts', misc_routes_1.serviceRouter);
+router.use('/policies', misc_routes_1.policyRouter);
+router.use('/amenities', misc_routes_1.amenityRouter);
+exports.default = router;
+//# sourceMappingURL=index.js.map
