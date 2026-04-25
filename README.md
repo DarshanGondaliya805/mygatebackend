@@ -124,11 +124,18 @@ All tables support **soft-delete** (paranoid/deletedAt) except `helper_entry_log
 
 Base URL: `http://localhost:3000/api/v1`
 
+### Public (No Auth Required)
+```
+GET    /public/societies                          — list all active societies
+GET    /public/societies/:societyId/blocks        — all blocks in a society
+GET    /public/blocks/:blockId/flats              — all flats in a block
+```
+
 ### Auth
 ```
-POST   /auth/login              Public — login with phone/email
+POST   /auth/login              Public — login with phone/email + fcm_token (optional)
 POST   /auth/refresh            Public — refresh access token
-POST   /auth/logout             Auth   — logout
+POST   /auth/logout             Auth   — logout (clears fcm_token)
 GET    /auth/me                 Auth   — own profile
 PUT    /auth/change-password    Auth   — change password
 ```
@@ -148,7 +155,7 @@ DELETE /users/:id               Admin+ — delete user
 ### Societies
 ```
 POST   /societies               Super Admin — create society with blocks+flats
-GET    /societies               Admin+      — list all societies
+GET    /societies               Admin+      — list all societies (paginated, ?search=)
 GET    /societies/:id           Auth        — society detail with blocks+flats
 PUT    /societies/:id           Admin+      — update society
 DELETE /societies/:id           Super Admin — delete society
@@ -157,7 +164,7 @@ DELETE /societies/:id           Super Admin — delete society
 ### Blocks & Flats
 ```
 POST   /blocks                          Admin+ — add block with flats
-GET    /blocks/society/:societyId       Auth   — blocks in society
+GET    /blocks/society/:societyId       Auth   — blocks in society (with flats)
 DELETE /blocks/:id                      Admin+ — delete block
 
 POST   /flats                           Admin+ — add flat
@@ -225,8 +232,10 @@ POST/GET/PUT/DELETE   /amenities        Admin+/Auth — manage amenities
 
 ### Notifications
 ```
-GET    /notifications                   Auth — unread notifications
+GET    /notifications                   Auth — list notifications (?unread=true for unread only)
+PUT    /notifications/:id/read          Auth — mark single notification as read
 PUT    /notifications/read-all          Auth — mark all as read
+POST   /notifications/test              Auth — send test notification to self (dev/debug)
 ```
 
 ---
@@ -263,7 +272,9 @@ Authorization: Bearer <access_token>
 | `JWT_REFRESH_EXPIRES_IN` | Refresh TTL e.g. `30d` |
 | `SUPER_ADMIN_EMAIL/PASSWORD` | Seeded super admin credentials |
 | `UPLOAD_PATH` | File storage path |
-| `FIREBASE_PROJECT_ID` | Firebase for push notifications |
+| `FIREBASE_PROJECT_ID` | Firebase project ID |
+| `FIREBASE_PRIVATE_KEY` | Firebase service account private key |
+| `FIREBASE_CLIENT_EMAIL` | Firebase service account email |
 
 ---
 

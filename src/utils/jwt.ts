@@ -6,6 +6,7 @@ export interface TokenPayload {
   uuid: string;
   role: string;
   society_id?: number | null;
+  source?: 'user' | 'staff';
 }
 
 export const generateAccessToken = (payload: TokenPayload): string => {

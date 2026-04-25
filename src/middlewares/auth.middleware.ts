@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken, TokenPayload } from '../utils/jwt';
 import { sendUnauthorized, sendForbidden } from '../utils/response';
-import { User } from '../models';
+import { User, Staff } from '../models';
 
 export interface AuthRequest extends Request {
   user?: TokenPayload & { dbUser?: any };
@@ -22,17 +22,16 @@ export const authenticate = async (
     const token = authHeader.split(' ')[1];
     const payload = verifyAccessToken(token);
 
-    // Verify user still exists and is active
-    const user = await User.findOne({
-      where: { id: payload.id, is_active: true, is_approved: true },
-    });
-
-    if (!user) {
-      sendUnauthorized(res, 'User not found or inactive');
-      return;
+    if (payload.source === 'staff') {
+      const staff = await Staff.findOne({ where: { id: payload.id, is_active: true } });
+      if (!staff) { sendUnauthorized(res, 'Staff not found or inactive'); return; }
+      req.user = { ...payload, role: 'security', dbUser: staff };
+    } else {
+      const user = await User.findOne({ where: { id: payload.id, is_active: true, is_approved: true } });
+      if (!user) { sendUnauthorized(res, 'User not found or inactive'); return; }
+      req.user = { ...payload, dbUser: user };
     }
 
-    req.user = { ...payload, dbUser: user };
     next();
   } catch (err: any) {
     if (err.name === 'TokenExpiredError') {

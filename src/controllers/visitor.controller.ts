@@ -48,13 +48,16 @@ export class VisitorController {
         is_pre_approved: !!is_pre_approved,
       });
 
-      // Notify residents if not pre-approved
-      if (!is_pre_approved && residents.length > 0) {
+      // Always notify flat residents when security creates a visitor entry
+      if (residents.length > 0) {
+        const isPreApproved = !!is_pre_approved;
         await notificationService.sendToMany(
           residents.map((r) => r.id),
           {
-            title: 'Visitor at Gate',
-            body: `${visitor.name} (${visitor_type}) is at the gate. Allow entry?`,
+            title: isPreApproved ? 'Pre-approved Visitor Arrived' : 'Visitor at Gate',
+            body: isPreApproved
+              ? `${visitor.name} (${visitor_type}) has arrived at the gate.`
+              : `${visitor.name} (${visitor_type}) is at the gate. Allow entry?`,
             type: 'visitor_request',
             reference_id: visitor.id,
             reference_type: 'visitor',

@@ -138,6 +138,18 @@ export class SocietyController {
       next(err);
     }
   }
+  async getallSociety(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const societies = await Society.findAll({ where: { is_active: true } });
+      sendSuccess(res, 'Active societies fetched', societies);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+
 }
+
+
 
 export default new SocietyController();

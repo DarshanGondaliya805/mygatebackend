@@ -12,5 +12,7 @@ router.get('/:id', societyController.getOne.bind(societyController));
 router.put('/:id', authorize('super_admin', 'admin'), uploadSingle('logo'), societyController.update.bind(societyController));
 router.put('/:id/toggle-active', authorize('super_admin'), societyController.toggleActive.bind(societyController));
 router.delete('/:id', authorize('super_admin'), societyController.delete.bind(societyController));
+router.get('/getallsociety', societyController.getallSociety.bind(societyController));
+
 
 export default router;

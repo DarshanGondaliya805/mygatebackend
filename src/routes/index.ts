@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import authRoutes from './auth.routes';
+import publicRoutes from './public.routes';
 import societyRoutes from './society.routes';
 import userRoutes from './user.routes';
 import visitorRoutes from './visitor.routes';
@@ -18,6 +19,7 @@ import {
 const router = Router();
 
 router.use('/auth', authRoutes);
+router.use('/public', publicRoutes);
 router.use('/societies', societyRoutes);
 router.use('/users', userRoutes);
 router.use('/blocks', blockRouter);
