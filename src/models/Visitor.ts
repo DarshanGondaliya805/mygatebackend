@@ -15,6 +15,7 @@ export interface VisitorAttributes {
   society_id: number;
   host_user_id?: number | null;
   created_by?: number | null;
+  created_by_staff?: number | null;   // ✅ staff id (security guard)
   status: VisitorStatus;
   purpose?: string | null;
   in_time?: Date | null;
@@ -27,12 +28,11 @@ export interface VisitorAttributes {
 }
 
 export interface VisitorCreationAttributes
-  extends Optional<VisitorAttributes, 'id' | 'uuid' | 'image' | 'vehicle_number' | 'host_user_id' | 'created_by' | 'status' | 'purpose' | 'in_time' | 'out_time' | 'is_pre_approved' | 'pre_approved_date'> {}
+  extends Optional<VisitorAttributes, 'id' | 'uuid' | 'image' | 'vehicle_number' | 'host_user_id' | 'created_by' | 'created_by_staff' | 'status' | 'purpose' | 'in_time' | 'out_time' | 'is_pre_approved' | 'pre_approved_date'> { }
 
 export class Visitor
   extends Model<VisitorAttributes, VisitorCreationAttributes>
-  implements VisitorAttributes
-{
+  implements VisitorAttributes {
   public id!: number;
   public uuid!: string;
   public name!: string;
@@ -44,6 +44,7 @@ export class Visitor
   public society_id!: number;
   public host_user_id!: number | null;
   public created_by!: number | null;
+    public created_by_staff!: number | null;  // ✅ added
   public status!: VisitorStatus;
   public purpose!: string | null;
   public in_time!: Date | null;
@@ -77,6 +78,7 @@ export class Visitor
         society_id: { type: DataTypes.INTEGER, allowNull: false },
         host_user_id: { type: DataTypes.INTEGER, allowNull: true },
         created_by: { type: DataTypes.INTEGER, allowNull: true },
+                created_by_staff: { type: DataTypes.INTEGER, allowNull: true }, // ✅ added
         status: {
           type: DataTypes.ENUM('pending', 'approved', 'rejected', 'checked_out'),
           defaultValue: 'pending',

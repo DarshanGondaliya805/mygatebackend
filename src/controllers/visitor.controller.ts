@@ -5,6 +5,7 @@ import { Visitor, User, Flat } from '../models';
 import { sendSuccess, sendCreated, sendNotFound, getPagination, getPaginationMeta } from '../utils/response';
 import { getRelativePath } from '../utils/upload';
 import notificationService from '../services/notification.service';
+import socketService from '../services/socket.service';
 
 const bodyId = (req: AuthRequest): number => req.user!.role === 'super_admin' ? req.body.society_id : req.user!.society_id!;
 const queryId = (req: AuthRequest): number | undefined => req.user!.role === 'super_admin' ? (req.query.society_id as any) : req.user!.society_id!;
@@ -14,12 +15,23 @@ export class VisitorController {
   async create(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const {
-        name, phone, visitor_type, vehicle_number,
-        flat_id, purpose, is_pre_approved,
+        name, phone, visitor_type,
+        vehicle_number, flat_id, purpose, is_pre_approved,
       } = req.body;
 
       const image = req.file ? getRelativePath(req.file.path) : null;
       const societyId = bodyId(req);
+
+      // Validate visitor_type - default to 'guest' if invalid
+      const validVisitorTypes = ['guest', 'delivery', 'cab', 'courier', 'maintenance', 'other'];
+      const validatedVisitorType = validVisitorTypes.includes(visitor_type) ? visitor_type : 'guest';
+
+      // Ensure flat_id is an integer
+      const parsedFlatId = parseInt(flat_id, 10);
+      if (isNaN(parsedFlatId)) {
+        res.status(400).json({ success: false, message: 'Invalid flat_id' });
+        return;
+      }
 
       // Check if visitor has visited before (by phone)
       const existing = await Visitor.findOne({
@@ -29,19 +41,23 @@ export class VisitorController {
 
       // Get flat's resident(s) to notify
       const residents = await User.findAll({
-        where: { flat_id, is_active: true, is_approved: true, role: 'user' },
+        where: { flat_id: parsedFlatId, is_active: true, is_approved: true, role: 'user' },
         attributes: ['id'],
       });
+
+      const isStaff = req.user!.role === 'security'; // adjust to your actual role name
 
       const visitor = await Visitor.create({
         name: existing ? existing.name : name,
         phone,
         image,
-        visitor_type,
+        visitor_type: validatedVisitorType,
         vehicle_number: vehicle_number || null,
-        flat_id,
+        flat_id: parsedFlatId,
         society_id: societyId,
-        created_by: req.user!.id,
+        host_user_id: null,
+        created_by: isStaff ? null : req.user!.id,           // only set if user
+        created_by_staff: isStaff ? req.user!.id : null,      // only set if staff
         status: is_pre_approved ? 'approved' : 'pending',
         purpose: purpose || null,
         in_time: new Date(),
@@ -50,19 +66,34 @@ export class VisitorController {
 
       // Always notify flat residents when security creates a visitor entry
       if (residents.length > 0) {
-        const isPreApproved = !!is_pre_approved;
-        await notificationService.sendToMany(
-          residents.map((r) => r.id),
-          {
-            title: isPreApproved ? 'Pre-approved Visitor Arrived' : 'Visitor at Gate',
-            body: isPreApproved
-              ? `${visitor.name} (${visitor_type}) has arrived at the gate.`
-              : `${visitor.name} (${visitor_type}) is at the gate. Allow entry?`,
-            type: 'visitor_request',
-            reference_id: visitor.id,
-            reference_type: 'visitor',
-          }
-        );
+        const isPreApproved = !is_pre_approved;
+        const notifPayload = {
+          title: isPreApproved ? 'Pre-approved Visitor Arrived' : 'Visitor at Gate',
+          body: isPreApproved
+            ? `${visitor.name} (${visitor_type}) has arrived at the gate.`
+            : `${visitor.name} (${visitor_type}) is at the gate. Allow entry?`,
+          type: 'visitor_request' as const,
+          reference_id: visitor.id,
+          reference_type: 'visitor' as const,
+        };
+
+        await notificationService.sendToMany(residents.map((r) => r.id), notifPayload);
+
+        // Real-time: push to each resident's socket room
+        for (const r of residents) {
+          socketService.emitToUser(r.id, 'visitor_request', {
+            visitor_id: visitor.id,
+            name: visitor.name,
+            phone: visitor.phone,
+            visitor_type: visitor.visitor_type,
+            image: visitor.image,
+            purpose: visitor.purpose,
+            status: visitor.status,
+            is_pre_approved: visitor.is_pre_approved,
+            flat_id: visitor.flat_id,
+            society_id: visitor.society_id,
+          });
+        }
       }
 
       sendCreated(res, 'Visitor entry created', visitor);
@@ -84,7 +115,7 @@ export class VisitorController {
         ...(status === 'checked_out' ? { out_time: new Date() } : {}),
       });
 
-      // Notify security
+      // Notify security via push + real-time socket
       if (visitor.created_by) {
         await notificationService.send({
           user_id: visitor.created_by,
@@ -94,7 +125,25 @@ export class VisitorController {
           reference_id: visitor.id,
           reference_type: 'visitor',
         });
+
+        // Real-time: notify the specific security guard who created the entry
+        socketService.emitToUser(visitor.created_by, 'visitor_status_update', {
+          visitor_id: visitor.id,
+          name: visitor.name,
+          status: visitor.status,
+          flat_id: visitor.flat_id,
+          society_id: visitor.society_id,
+        });
       }
+
+      // Also broadcast to ALL security staff in the society so any guard at gate is informed
+      socketService.emitToSocietySecurity(visitor.society_id, 'visitor_status_update', {
+        visitor_id: visitor.id,
+        name: visitor.name,
+        status: visitor.status,
+        flat_id: visitor.flat_id,
+        society_id: visitor.society_id,
+      });
 
       sendSuccess(res, `Visitor ${status} successfully`, visitor);
     } catch (err) {

@@ -5,6 +5,16 @@ import { sendSuccess, sendCreated, sendNotFound } from '../utils/response';
 
 // ─── Block Routes ─────────────────────────────────────────────────────────────
 export const blockRouter = Router();
+blockRouter.get('/society/:societyId', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const blocks = await Block.findAll({
+      where: { society_id: req.params.societyId },
+      include: [{ model: Flat, as: 'flats' }],
+      order: [['name', 'ASC']],
+    });
+    sendSuccess(res, 'Blocks fetched', blocks);
+  } catch (err) { next(err); }
+});
 blockRouter.use(authenticate);
 
 blockRouter.post('/', authorize('super_admin', 'admin'), async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -29,16 +39,7 @@ blockRouter.post('/', authorize('super_admin', 'admin'), async (req: AuthRequest
   } catch (err) { next(err); }
 });
 
-blockRouter.get('/society/:societyId', async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const blocks = await Block.findAll({
-      where: { society_id: req.params.societyId },
-      include: [{ model: Flat, as: 'flats' }],
-      order: [['name', 'ASC']],
-    });
-    sendSuccess(res, 'Blocks fetched', blocks);
-  } catch (err) { next(err); }
-});
+
 
 blockRouter.delete('/:id', authorize('super_admin', 'admin'), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -51,6 +52,15 @@ blockRouter.delete('/:id', authorize('super_admin', 'admin'), async (req: AuthRe
 
 // ─── Flat Routes ──────────────────────────────────────────────────────────────
 export const flatRouter = Router();
+flatRouter.get('/block/:blockId', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const flats = await Flat.findAll({
+      where: { block_id: req.params.blockId },
+      order: [['flat_number', 'ASC']],
+    });
+    sendSuccess(res, 'Flats fetched', flats);
+  } catch (err) { next(err); }
+});
 flatRouter.use(authenticate);
 
 flatRouter.post('/', authorize('super_admin', 'admin'), async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -61,15 +71,7 @@ flatRouter.post('/', authorize('super_admin', 'admin'), async (req: AuthRequest,
   } catch (err) { next(err); }
 });
 
-flatRouter.get('/block/:blockId', async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const flats = await Flat.findAll({
-      where: { block_id: req.params.blockId },
-      order: [['flat_number', 'ASC']],
-    });
-    sendSuccess(res, 'Flats fetched', flats);
-  } catch (err) { next(err); }
-});
+
 
 flatRouter.get('/society/:societyId', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {

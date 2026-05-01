@@ -34,8 +34,8 @@ export class AuthService {
         ...(fcmToken ? { fcm_token: fcmToken } : {}),
       });
 
-      const { id, uuid, name, email, phone, role } = (user as any).dataValues;
-      return { accessToken, refreshToken, user: { id, uuid, name: name ?? '', email: email ?? '', phone: phone ?? '', role, source: 'user' } };
+      const { id, uuid, name, email, phone, role,society_id  } = (user as any).dataValues;
+      return { accessToken, refreshToken, user: { id, uuid, name: name ?? '', email: email ?? '', phone: phone ?? '', role, source: 'user',society_id : society_id } };
     }
 
     // ── 2. Fall back to staff table ───────────────────────────────────────────
@@ -46,7 +46,6 @@ export class AuthService {
       },
       attributes: ['id', 'uuid', 'name', 'email', 'phone', 'password', 'staff_type', 'society_id', 'is_active'],
     });
-
     if (!staff) throw new AppError('Invalid credentials', 401);
 
     const staffHash = staff.getDataValue('password');
@@ -59,8 +58,8 @@ export class AuthService {
     const accessToken = generateAccessToken(staffPayload);
     const refreshToken = generateRefreshToken(staffPayload);
 
-    const { id, uuid, name, email, phone, staff_type } = (staff as any).dataValues;
-    return { accessToken, refreshToken, user: { id, uuid, name: name ?? '', email: email ?? '', phone: phone ?? '', role: 'security', staff_type, source: 'staff' } };
+    const { id, uuid, name, email, phone, staff_type,society_id } = (staff as any).dataValues;
+    return { accessToken, refreshToken, user: { id, uuid, name: name ?? '', email: email ?? '', phone: phone ?? '', role: 'security', staff_type, source: 'staff', society_id: society_id } };
   }
 
   async refreshToken(token: string) {

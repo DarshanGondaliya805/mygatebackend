@@ -1,19 +1,25 @@
 import dotenv from 'dotenv';
 dotenv.config({ path: `.env.${process.env.NODE_ENV || 'development'}` });
 
+import { createServer } from 'http';
 import app from './app';
 import { connectDatabase } from './config/db';
 import config from './config/app';
 import logger from './utils/logger';
+import socketService from './services/socket.service';
 
 const startServer = async () => {
   try {
     await connectDatabase();
 
-    const server = app.listen(config.port, () => {
+    const httpServer = createServer(app);
+    socketService.init(httpServer);
+
+    const server = httpServer.listen(config.port, () => {
       logger.info(`🚀 MyGate API running on port ${config.port} [${config.env}]`);
       logger.info(`📦 Health check: http://localhost:${config.port}/health`);
       logger.info(`🔗 API base:     http://localhost:${config.port}/api/v1`);
+      logger.info(`⚡ Socket.io:    ws://localhost:${config.port}`);
     });
 
     const shutdown = async (signal: string) => {
