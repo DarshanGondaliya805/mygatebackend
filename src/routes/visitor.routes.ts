@@ -8,9 +8,10 @@ import { validate } from '../middlewares/validate.middleware';
 const router = Router();
 router.use(authenticate);
 
-// Security creates entries
-router.post('/', 
-  authorize('security', 'admin', 'super_admin'), 
+// Security: create visitor entry (creates/updates visitor profile + new visit log)
+router.post(
+  '/',
+  authorize('security', 'admin', 'super_admin'),
   uploadSingle('image'),
   validate([
     body('name').notEmpty().withMessage('Name is required'),
@@ -21,19 +22,22 @@ router.post('/',
   visitorController.create.bind(visitorController)
 );
 
-// User pre-approves
+// User: pre-approve upcoming visitor
 router.post('/pre-approve', authorize('user', 'admin'), visitorController.preApprove.bind(visitorController));
 
-// Look up repeat visitor by phone
+// Look up repeat visitor profile by phone (for auto-fill)
 router.get('/lookup/:phone', authorize('security', 'admin', 'super_admin'), visitorController.getByPhone.bind(visitorController));
 
-// List (filtered by role in controller)
+// List all visitor logs (filtered by role, supports date / date range / type / status / flat)
 router.get('/', visitorController.getAll.bind(visitorController));
 
-// User approves/rejects
+// Get all visit logs for a specific visitor profile
+router.get('/:id/logs', visitorController.getVisitorLogs.bind(visitorController));
+
+// User: approve / reject a visitor log entry
 router.put('/:id/status', authorize('user', 'admin'), visitorController.updateStatus.bind(visitorController));
 
-// Security marks checkout
+// Security: mark visitor checkout (sets out_time)
 router.put('/:id/checkout', authorize('security', 'admin', 'super_admin'), visitorController.checkout.bind(visitorController));
 
 export default router;

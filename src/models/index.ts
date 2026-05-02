@@ -10,6 +10,7 @@ import { SocietyPolicy } from './SocietyPolicy';
 import { Amenity } from './Amenity';
 import { Staff } from './Staff';
 import { Visitor } from './Visitor';
+import { VisitorLog } from './VisitorLog';
 import { DailyHelper } from './DailyHelper';
 import { HelperEntryLog } from './HelperEntryLog';
 import { Complaint } from './Complaint';
@@ -26,6 +27,7 @@ SocietyPolicy.initModel(sequelize);
 Amenity.initModel(sequelize);
 Staff.initModel(sequelize);
 Visitor.initModel(sequelize);
+VisitorLog.initModel(sequelize);
 DailyHelper.initModel(sequelize);
 HelperEntryLog.initModel(sequelize);
 Complaint.initModel(sequelize);
@@ -67,15 +69,23 @@ Amenity.belongsTo(Society, { foreignKey: 'society_id', as: 'society' });
 Society.hasMany(Staff, { foreignKey: 'society_id', as: 'staffMembers' });
 Staff.belongsTo(Society, { foreignKey: 'society_id', as: 'society' });
 
-// Visitor associations
+// Visitor profile associations
 Society.hasMany(Visitor, { foreignKey: 'society_id', as: 'visitors' });
 Visitor.belongsTo(Society, { foreignKey: 'society_id', as: 'society' });
-Flat.hasMany(Visitor, { foreignKey: 'flat_id', as: 'visitors' });
-Visitor.belongsTo(Flat, { foreignKey: 'flat_id', as: 'flat' });
-User.hasMany(Visitor, { foreignKey: 'host_user_id', as: 'hostedVisitors' });
-Visitor.belongsTo(User, { foreignKey: 'host_user_id', as: 'host' });
-User.hasMany(Visitor, { foreignKey: 'created_by', as: 'createdVisitors' });
-Visitor.belongsTo(User, { foreignKey: 'created_by', as: 'createdByUser' });
+
+// VisitorLog associations
+Visitor.hasMany(VisitorLog, { foreignKey: 'visitor_id', as: 'logs' });
+VisitorLog.belongsTo(Visitor, { foreignKey: 'visitor_id', as: 'visitor' });
+Flat.hasMany(VisitorLog, { foreignKey: 'flat_id', as: 'visitorLogs' });
+VisitorLog.belongsTo(Flat, { foreignKey: 'flat_id', as: 'flat' });
+Society.hasMany(VisitorLog, { foreignKey: 'society_id', as: 'visitorLogs' });
+VisitorLog.belongsTo(Society, { foreignKey: 'society_id', as: 'society' });
+User.hasMany(VisitorLog, { foreignKey: 'host_user_id', as: 'hostedVisitorLogs' });
+VisitorLog.belongsTo(User, { foreignKey: 'host_user_id', as: 'host' });
+User.hasMany(VisitorLog, { foreignKey: 'created_by', as: 'createdVisitorLogs' });
+VisitorLog.belongsTo(User, { foreignKey: 'created_by', as: 'createdByUser' });
+Staff.hasMany(VisitorLog, { foreignKey: 'created_by_staff', as: 'visitorLogs' });
+VisitorLog.belongsTo(Staff, { foreignKey: 'created_by_staff', as: 'createdByStaff' });
 
 // DailyHelper associations
 User.hasMany(DailyHelper, { foreignKey: 'user_id', as: 'dailyHelpers' });
@@ -122,6 +132,7 @@ export {
   Amenity,
   Staff,
   Visitor,
+  VisitorLog,
   DailyHelper,
   HelperEntryLog,
   Complaint,
