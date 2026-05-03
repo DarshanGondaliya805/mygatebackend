@@ -134,11 +134,13 @@ export class DailyHelperController {
   async logEntry(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { daily_helper_id } = req.body;
+      const isStaff = req.user!.role === 'security';
       const log = await HelperEntryLog.create({
         daily_helper_id,
         society_id: bodyId(req),
         in_time: new Date(),
-        created_by: req.user!.id,
+        created_by: isStaff ? null : req.user!.id,
+        created_by_staff: isStaff ? req.user!.id : null,
       });
       sendCreated(res, 'Entry logged', log);
     } catch (err) { next(err); }

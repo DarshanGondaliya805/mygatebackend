@@ -74,7 +74,7 @@ app.use('/uploads', express.static(path.resolve(config.upload.path)));
 app.get('/health', (req, res) => {
   res.json({
     success: true,
-    message: 'MyGate API is running',
+    message: 'MyGate API is working',
     env: config.env,
     timestamp: new Date().toISOString(),
   });

@@ -6,6 +6,7 @@ export declare class VisitorController {
     checkout(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
     getByPhone(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
     getAll(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
+    getVisitorLogs(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
     preApprove(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
 }
 declare const _default: VisitorController;

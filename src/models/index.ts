@@ -98,6 +98,8 @@ DailyHelper.belongsTo(Society, { foreignKey: 'society_id', as: 'society' });
 // HelperEntryLog associations
 DailyHelper.hasMany(HelperEntryLog, { foreignKey: 'daily_helper_id', as: 'entryLogs' });
 HelperEntryLog.belongsTo(DailyHelper, { foreignKey: 'daily_helper_id', as: 'helper' });
+Staff.hasMany(HelperEntryLog, { foreignKey: 'created_by_staff', as: 'helperEntryLogs' });
+HelperEntryLog.belongsTo(Staff, { foreignKey: 'created_by_staff', as: 'createdByStaff' });
 
 // Complaint associations
 User.hasMany(Complaint, { foreignKey: 'raised_by', as: 'complaints' });

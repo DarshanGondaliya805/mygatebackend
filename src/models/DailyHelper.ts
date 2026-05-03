@@ -83,12 +83,14 @@ export interface HelperEntryLogAttributes {
   in_time: Date;
   out_time?: Date | null;
   created_by?: number | null;
+  created_by_staff?: number | null;
   createdAt?: Date;
   updatedAt?: Date;
+  deletedAt?: Date | null;
 }
 
 export interface HelperEntryLogCreationAttributes
-  extends Optional<HelperEntryLogAttributes, 'id' | 'uuid' | 'out_time' | 'created_by'> {}
+  extends Optional<HelperEntryLogAttributes, 'id' | 'uuid' | 'out_time' | 'created_by' | 'created_by_staff'> {}
 
 export class HelperEntryLog
   extends Model<HelperEntryLogAttributes, HelperEntryLogCreationAttributes>
@@ -101,8 +103,10 @@ export class HelperEntryLog
   public in_time!: Date;
   public out_time!: Date | null;
   public created_by!: number | null;
+  public created_by_staff!: number | null;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
+  public readonly deletedAt!: Date | null;
 
   public readonly helper?: any;
 
@@ -116,8 +120,9 @@ export class HelperEntryLog
         in_time: { type: DataTypes.DATE, allowNull: false },
         out_time: { type: DataTypes.DATE, allowNull: true },
         created_by: { type: DataTypes.INTEGER, allowNull: true },
+        created_by_staff: { type: DataTypes.INTEGER, allowNull: true },
       },
-      { sequelize, tableName: 'helper_entry_logs', timestamps: true }
+      { sequelize, tableName: 'helper_entry_logs', paranoid: true, timestamps: true }
     );
     return HelperEntryLog;
   }

@@ -7,6 +7,19 @@ const models_1 = require("../models");
 const response_1 = require("../utils/response");
 // ─── Block Routes ─────────────────────────────────────────────────────────────
 exports.blockRouter = (0, express_1.Router)();
+exports.blockRouter.get('/society/:societyId', async (req, res, next) => {
+    try {
+        const blocks = await models_1.Block.findAll({
+            where: { society_id: req.params.societyId },
+            include: [{ model: models_1.Flat, as: 'flats' }],
+            order: [['name', 'ASC']],
+        });
+        (0, response_1.sendSuccess)(res, 'Blocks fetched', blocks);
+    }
+    catch (err) {
+        next(err);
+    }
+});
 exports.blockRouter.use(auth_middleware_1.authenticate);
 exports.blockRouter.post('/', (0, auth_middleware_1.authorize)('super_admin', 'admin'), async (req, res, next) => {
     try {
@@ -29,19 +42,6 @@ exports.blockRouter.post('/', (0, auth_middleware_1.authorize)('super_admin', 'a
         next(err);
     }
 });
-exports.blockRouter.get('/society/:societyId', async (req, res, next) => {
-    try {
-        const blocks = await models_1.Block.findAll({
-            where: { society_id: req.params.societyId },
-            include: [{ model: models_1.Flat, as: 'flats' }],
-            order: [['name', 'ASC']],
-        });
-        (0, response_1.sendSuccess)(res, 'Blocks fetched', blocks);
-    }
-    catch (err) {
-        next(err);
-    }
-});
 exports.blockRouter.delete('/:id', (0, auth_middleware_1.authorize)('super_admin', 'admin'), async (req, res, next) => {
     try {
         const block = await models_1.Block.findByPk(req.params.id);
@@ -58,17 +58,6 @@ exports.blockRouter.delete('/:id', (0, auth_middleware_1.authorize)('super_admin
 });
 // ─── Flat Routes ──────────────────────────────────────────────────────────────
 exports.flatRouter = (0, express_1.Router)();
-exports.flatRouter.use(auth_middleware_1.authenticate);
-exports.flatRouter.post('/', (0, auth_middleware_1.authorize)('super_admin', 'admin'), async (req, res, next) => {
-    try {
-        const { flat_number, floor, block_id, society_id, type } = req.body;
-        const flat = await models_1.Flat.create({ flat_number, floor, block_id, society_id, type });
-        (0, response_1.sendCreated)(res, 'Flat created', flat);
-    }
-    catch (err) {
-        next(err);
-    }
-});
 exports.flatRouter.get('/block/:blockId', async (req, res, next) => {
     try {
         const flats = await models_1.Flat.findAll({
@@ -76,6 +65,17 @@ exports.flatRouter.get('/block/:blockId', async (req, res, next) => {
             order: [['flat_number', 'ASC']],
         });
         (0, response_1.sendSuccess)(res, 'Flats fetched', flats);
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.flatRouter.use(auth_middleware_1.authenticate);
+exports.flatRouter.post('/', (0, auth_middleware_1.authorize)('super_admin', 'admin'), async (req, res, next) => {
+    try {
+        const { flat_number, floor, block_id, society_id, type } = req.body;
+        const flat = await models_1.Flat.create({ flat_number, floor, block_id, society_id, type });
+        (0, response_1.sendCreated)(res, 'Flat created', flat);
     }
     catch (err) {
         next(err);

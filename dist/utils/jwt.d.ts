@@ -3,6 +3,7 @@ export interface TokenPayload {
     uuid: string;
     role: string;
     society_id?: number | null;
+    source?: 'user' | 'staff';
 }
 export declare const generateAccessToken: (payload: TokenPayload) => string;
 export declare const generateRefreshToken: (payload: TokenPayload) => string;

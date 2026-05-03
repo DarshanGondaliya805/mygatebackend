@@ -8,6 +8,7 @@ const society_controller_1 = __importDefault(require("../controllers/society.con
 const auth_middleware_1 = require("../middlewares/auth.middleware");
 const upload_1 = require("../utils/upload");
 const router = (0, express_1.Router)();
+router.get('/getallsociety', society_controller_1.default.getallSociety.bind(society_controller_1.default));
 router.use(auth_middleware_1.authenticate);
 router.post('/', (0, auth_middleware_1.authorize)('super_admin'), (0, upload_1.uploadSingle)('logo'), society_controller_1.default.create.bind(society_controller_1.default));
 router.get('/', (0, auth_middleware_1.authorize)('super_admin', 'admin'), society_controller_1.default.getAll.bind(society_controller_1.default));

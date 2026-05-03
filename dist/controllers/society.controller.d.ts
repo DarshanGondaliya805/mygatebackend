@@ -7,6 +7,7 @@ export declare class SocietyController {
     update(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
     toggleActive(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
     delete(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
+    getallSociety(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
 }
 declare const _default: SocietyController;
 export default _default;

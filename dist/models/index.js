@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Notification = exports.ServiceContact = exports.Event = exports.Complaint = exports.HelperEntryLog = exports.DailyHelper = exports.Visitor = exports.Staff = exports.Amenity = exports.SocietyPolicy = exports.Flat = exports.Block = exports.Society = exports.User = exports.Sequelize = exports.sequelize = void 0;
+exports.Notification = exports.ServiceContact = exports.Event = exports.Complaint = exports.HelperEntryLog = exports.DailyHelper = exports.VisitorLog = exports.Visitor = exports.Staff = exports.Amenity = exports.SocietyPolicy = exports.Flat = exports.Block = exports.Society = exports.User = exports.Sequelize = exports.sequelize = void 0;
 const sequelize_1 = require("sequelize");
 Object.defineProperty(exports, "Sequelize", { enumerable: true, get: function () { return sequelize_1.Sequelize; } });
 const db_1 = __importDefault(require("../config/db"));
@@ -25,6 +25,8 @@ const Staff_1 = require("./Staff");
 Object.defineProperty(exports, "Staff", { enumerable: true, get: function () { return Staff_1.Staff; } });
 const Visitor_1 = require("./Visitor");
 Object.defineProperty(exports, "Visitor", { enumerable: true, get: function () { return Visitor_1.Visitor; } });
+const VisitorLog_1 = require("./VisitorLog");
+Object.defineProperty(exports, "VisitorLog", { enumerable: true, get: function () { return VisitorLog_1.VisitorLog; } });
 const DailyHelper_1 = require("./DailyHelper");
 Object.defineProperty(exports, "DailyHelper", { enumerable: true, get: function () { return DailyHelper_1.DailyHelper; } });
 const HelperEntryLog_1 = require("./HelperEntryLog");
@@ -46,6 +48,7 @@ SocietyPolicy_1.SocietyPolicy.initModel(db_1.default);
 Amenity_1.Amenity.initModel(db_1.default);
 Staff_1.Staff.initModel(db_1.default);
 Visitor_1.Visitor.initModel(db_1.default);
+VisitorLog_1.VisitorLog.initModel(db_1.default);
 DailyHelper_1.DailyHelper.initModel(db_1.default);
 HelperEntryLog_1.HelperEntryLog.initModel(db_1.default);
 Complaint_1.Complaint.initModel(db_1.default);
@@ -77,15 +80,22 @@ Amenity_1.Amenity.belongsTo(Society_1.Society, { foreignKey: 'society_id', as: '
 // Society <-> Staff
 Society_1.Society.hasMany(Staff_1.Staff, { foreignKey: 'society_id', as: 'staffMembers' });
 Staff_1.Staff.belongsTo(Society_1.Society, { foreignKey: 'society_id', as: 'society' });
-// Visitor associations
+// Visitor profile associations
 Society_1.Society.hasMany(Visitor_1.Visitor, { foreignKey: 'society_id', as: 'visitors' });
 Visitor_1.Visitor.belongsTo(Society_1.Society, { foreignKey: 'society_id', as: 'society' });
-Flat_1.Flat.hasMany(Visitor_1.Visitor, { foreignKey: 'flat_id', as: 'visitors' });
-Visitor_1.Visitor.belongsTo(Flat_1.Flat, { foreignKey: 'flat_id', as: 'flat' });
-User_1.User.hasMany(Visitor_1.Visitor, { foreignKey: 'host_user_id', as: 'hostedVisitors' });
-Visitor_1.Visitor.belongsTo(User_1.User, { foreignKey: 'host_user_id', as: 'host' });
-User_1.User.hasMany(Visitor_1.Visitor, { foreignKey: 'created_by', as: 'createdVisitors' });
-Visitor_1.Visitor.belongsTo(User_1.User, { foreignKey: 'created_by', as: 'createdByUser' });
+// VisitorLog associations
+Visitor_1.Visitor.hasMany(VisitorLog_1.VisitorLog, { foreignKey: 'visitor_id', as: 'logs' });
+VisitorLog_1.VisitorLog.belongsTo(Visitor_1.Visitor, { foreignKey: 'visitor_id', as: 'visitor' });
+Flat_1.Flat.hasMany(VisitorLog_1.VisitorLog, { foreignKey: 'flat_id', as: 'visitorLogs' });
+VisitorLog_1.VisitorLog.belongsTo(Flat_1.Flat, { foreignKey: 'flat_id', as: 'flat' });
+Society_1.Society.hasMany(VisitorLog_1.VisitorLog, { foreignKey: 'society_id', as: 'visitorLogs' });
+VisitorLog_1.VisitorLog.belongsTo(Society_1.Society, { foreignKey: 'society_id', as: 'society' });
+User_1.User.hasMany(VisitorLog_1.VisitorLog, { foreignKey: 'host_user_id', as: 'hostedVisitorLogs' });
+VisitorLog_1.VisitorLog.belongsTo(User_1.User, { foreignKey: 'host_user_id', as: 'host' });
+User_1.User.hasMany(VisitorLog_1.VisitorLog, { foreignKey: 'created_by', as: 'createdVisitorLogs' });
+VisitorLog_1.VisitorLog.belongsTo(User_1.User, { foreignKey: 'created_by', as: 'createdByUser' });
+Staff_1.Staff.hasMany(VisitorLog_1.VisitorLog, { foreignKey: 'created_by_staff', as: 'visitorLogs' });
+VisitorLog_1.VisitorLog.belongsTo(Staff_1.Staff, { foreignKey: 'created_by_staff', as: 'createdByStaff' });
 // DailyHelper associations
 User_1.User.hasMany(DailyHelper_1.DailyHelper, { foreignKey: 'user_id', as: 'dailyHelpers' });
 DailyHelper_1.DailyHelper.belongsTo(User_1.User, { foreignKey: 'user_id', as: 'user' });

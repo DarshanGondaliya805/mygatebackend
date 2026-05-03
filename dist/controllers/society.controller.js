@@ -145,6 +145,15 @@ class SocietyController {
             next(err);
         }
     }
+    async getallSociety(req, res, next) {
+        try {
+            const societies = await models_1.Society.findAll({ where: { is_active: true } });
+            (0, response_1.sendSuccess)(res, 'Active societies fetched', societies);
+        }
+        catch (err) {
+            next(err);
+        }
+    }
 }
 exports.SocietyController = SocietyController;
 exports.default = new SocietyController();

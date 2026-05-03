@@ -13,15 +13,22 @@ const authenticate = async (req, res, next) => {
         }
         const token = authHeader.split(' ')[1];
         const payload = (0, jwt_1.verifyAccessToken)(token);
-        // Verify user still exists and is active
-        const user = await models_1.User.findOne({
-            where: { id: payload.id, is_active: true, is_approved: true },
-        });
-        if (!user) {
-            (0, response_1.sendUnauthorized)(res, 'User not found or inactive');
-            return;
+        if (payload.source === 'staff') {
+            const staff = await models_1.Staff.findOne({ where: { id: payload.id, is_active: true } });
+            if (!staff) {
+                (0, response_1.sendUnauthorized)(res, 'Staff not found or inactive');
+                return;
+            }
+            req.user = { ...payload, role: 'security', dbUser: staff };
         }
-        req.user = { ...payload, dbUser: user };
+        else {
+            const user = await models_1.User.findOne({ where: { id: payload.id, is_active: true, is_approved: true } });
+            if (!user) {
+                (0, response_1.sendUnauthorized)(res, 'User not found or inactive');
+                return;
+            }
+            req.user = { ...payload, dbUser: user };
+        }
         next();
     }
     catch (err) {

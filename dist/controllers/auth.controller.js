@@ -10,7 +10,6 @@ class AuthController {
     async login(req, res, next) {
         try {
             const { identifier, password, fcm_token } = req.body;
-            console.log(fcm_token, "lllllllllll");
             const result = await auth_service_1.default.login(identifier, password, fcm_token);
             (0, response_1.sendSuccess)(res, 'Login successful', result);
         }
@@ -30,7 +29,7 @@ class AuthController {
     }
     async logout(req, res, next) {
         try {
-            await auth_service_1.default.logout(req.user.id);
+            await auth_service_1.default.logout(req.user.id, req.user.source);
             (0, response_1.sendSuccess)(res, 'Logged out successfully');
         }
         catch (err) {
