@@ -37,6 +37,9 @@ router.get('/:id/logs', visitorController.getVisitorLogs.bind(visitorController)
 // User: approve / reject a visitor log entry
 router.put('/:id/status', authorize('user', 'admin'), visitorController.updateStatus.bind(visitorController));
 
+// Security: approve / reject visitor only if resident hasn't acted yet (status = pending)
+router.put('/:id/security-override', authorize('security', 'admin', 'super_admin'), visitorController.securityOverrideStatus.bind(visitorController));
+
 // Security: mark visitor checkout (sets out_time)
 router.put('/:id/checkout', authorize('security', 'admin', 'super_admin'), visitorController.checkout.bind(visitorController));
 

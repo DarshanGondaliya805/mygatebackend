@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import { Op } from 'sequelize';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { Staff, DailyHelper, HelperEntryLog, Event, ServiceContact, SocietyPolicy, Amenity } from '../models';
 import { sendSuccess, sendCreated, sendNotFound, getPagination, getPaginationMeta } from '../utils/response';
@@ -122,12 +123,46 @@ export class DailyHelperController {
       const where: any = {};
       const sid = queryId(req);
       if (sid) where.society_id = sid;
+
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+
       const { count, rows } = await DailyHelper.findAndCountAll({
         where,
+        include: [
+          {
+            model: HelperEntryLog,
+            as: 'entryLogs',
+            required: false,
+            where: { in_time: { [Op.between]: [todayStart, todayEnd] } },
+            attributes: ['id', 'in_time', 'out_time'],
+          },
+        ],
         ...getPagination(page, limit),
         order: [['name', 'ASC']],
+        distinct: true,
       });
-      sendSuccess(res, 'All helpers fetched', rows, 200, getPaginationMeta(count, page, limit));
+
+      const result = rows.map((helper: any) => {
+        const logs: any[] = (helper.entryLogs ?? []).sort(
+          (a: any, b: any) => new Date(b.in_time).getTime() - new Date(a.in_time).getTime()
+        );
+        const latestLog = logs[0] ?? null;
+
+        const helperData = helper.toJSON();
+        delete helperData.entryLogs;
+
+        // isEntry=1 only if currently inside (entered but not yet exited)
+        const currentlyInside = latestLog && !latestLog.out_time;
+
+        return {
+          ...helperData,
+          isEntry: currentlyInside ? '1' : '0',
+          isExit: latestLog?.out_time ? '1' : null,
+        };
+      });
+
+      sendSuccess(res, 'All helpers fetched', result, 200, getPaginationMeta(count, page, limit));
     } catch (err) { next(err); }
   }
 
@@ -155,6 +190,39 @@ export class DailyHelperController {
       if (!log) { sendNotFound(res, 'Active entry not found'); return; }
       await log.update({ out_time: new Date() });
       sendSuccess(res, 'Exit logged', log);
+    } catch (err) { next(err); }
+  }
+
+  async getLogs(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const { helper_id, date, start_date, end_date } = req.query;
+
+      const where: any = {};
+      const sid = queryId(req);
+      if (sid) where.society_id = sid;
+      if (helper_id) where.daily_helper_id = helper_id;
+
+      if (date) {
+        const s = new Date(date as string); s.setHours(0, 0, 0, 0);
+        const e = new Date(date as string); e.setHours(23, 59, 59, 999);
+        where.in_time = { [Op.between]: [s, e] };
+      } else if (start_date || end_date) {
+        const range: any = {};
+        if (start_date) { const s = new Date(start_date as string); s.setHours(0, 0, 0, 0); range[Op.gte] = s; }
+        if (end_date) { const e = new Date(end_date as string); e.setHours(23, 59, 59, 999); range[Op.lte] = e; }
+        where.in_time = range;
+      }
+
+      const { count, rows } = await HelperEntryLog.findAndCountAll({
+        where,
+        include: [{ model: DailyHelper, as: 'helper', attributes: ['id', 'name', 'phone', 'helper_type', 'image'] }],
+        ...getPagination(page, limit),
+        order: [['in_time', 'DESC']],
+      });
+
+      sendSuccess(res, 'Helper entry logs fetched', rows, 200, getPaginationMeta(count, page, limit));
     } catch (err) { next(err); }
   }
 }

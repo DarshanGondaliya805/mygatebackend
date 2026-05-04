@@ -37,6 +37,7 @@ helperRouter.get('/my', authorize('user'), dailyHelperController.getMyHelpers.bi
 helperRouter.get('/', authorize('admin', 'super_admin', 'security'), dailyHelperController.getAllForSociety.bind(dailyHelperController));
 helperRouter.post('/entry', authorize('security', 'admin'), dailyHelperController.logEntry.bind(dailyHelperController));
 helperRouter.put('/:helper_id/exit', authorize('security', 'admin'), dailyHelperController.logExit.bind(dailyHelperController));
+helperRouter.get('/logs', authorize('security', 'admin', 'super_admin'), dailyHelperController.getLogs.bind(dailyHelperController));
 
 // ─── Event Routes ─────────────────────────────────────────────────────────────
 export const eventRouter = Router();

@@ -61,7 +61,7 @@ export class VisitorController {
         host_user_id: null,
         created_by: isStaff ? null : req.user!.id,
         created_by_staff: isStaff ? req.user!.id : null,
-        status: is_pre_approved ? 'approved' : 'pending',
+        status: !is_pre_approved ? 'approved' : 'pending',
         purpose: purpose || null,
         in_time: new Date(),
         is_pre_approved: !!is_pre_approved,
@@ -167,6 +167,48 @@ export class VisitorController {
     }
   }
 
+  // PUT /:id/security-override — Security approves/rejects if resident hasn't acted yet
+  async securityOverrideStatus(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { status } = req.body;
+
+      if (!['approved', 'rejected'].includes(status)) {
+        res.status(400).json({ success: false, message: 'Status must be approved or rejected' });
+        return;
+      }
+
+      const log = await VisitorLog.findByPk(req.params.id, {
+        include: [{ model: Visitor, as: 'visitor' }],
+      });
+      if (!log) { sendNotFound(res, 'Visitor log not found'); return; }
+
+      if (log.status !== 'pending') {
+        res.status(400).json({
+          success: false,
+          message: `Cannot override — resident has already ${log.status} this visitor`,
+        });
+        return;
+      }
+
+      await log.update({ status });
+
+      const visitor = (log as any).visitor as Visitor;
+
+      socketService.emitToSocietySecurity(log.society_id, 'visitor_status_update', {
+        log_id: log.id,
+        visitor_id: log.visitor_id,
+        name: visitor?.name,
+        status: log.status,
+        flat_id: log.flat_id,
+        society_id: log.society_id,
+      });
+
+      sendSuccess(res, `Visitor ${status} by security`, log);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   // PUT /:id/checkout — Security marks visitor as checked out
   async checkout(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -215,18 +257,17 @@ export class VisitorController {
     }
   }
 
-  // GET / — List all visitor logs (filtered by role)
+  // GET / — List all visitor logs (filtered by role, supports search by name/phone)
   async getAll(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 20;
-      const { visitor_type, status, flat_id, date, start_date, end_date } = req.query;
+      const { visitor_type, status, flat_id, date, start_date, end_date, search } = req.query;
 
       const where: any = {};
       const sid = queryId(req);
       if (sid) where.society_id = sid;
 
-      // Regular users only see their flat's logs
       if (req.user!.role === 'user') {
         where.flat_id = req.user!.dbUser?.flat_id;
       } else if (flat_id) {
@@ -236,39 +277,41 @@ export class VisitorController {
       if (visitor_type) where.visitor_type = visitor_type;
       if (status) where.status = status;
 
-      // Single date filter (whole day)
       if (date) {
-        const start = new Date(date as string);
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(date as string);
-        end.setHours(23, 59, 59, 999);
+        const start = new Date(date as string); start.setHours(0, 0, 0, 0);
+        const end = new Date(date as string); end.setHours(23, 59, 59, 999);
         where.in_time = { [Op.between]: [start, end] };
       } else if (start_date || end_date) {
-        // Date range filter
         const range: any = {};
-        if (start_date) {
-          const s = new Date(start_date as string);
-          s.setHours(0, 0, 0, 0);
-          range[Op.gte] = s;
-        }
-        if (end_date) {
-          const e = new Date(end_date as string);
-          e.setHours(23, 59, 59, 999);
-          range[Op.lte] = e;
-        }
+        if (start_date) { const s = new Date(start_date as string); s.setHours(0, 0, 0, 0); range[Op.gte] = s; }
+        if (end_date) { const e = new Date(end_date as string); e.setHours(23, 59, 59, 999); range[Op.lte] = e; }
         where.in_time = range;
+      }
+
+      const visitorWhere: any = {};
+      if (search) {
+        visitorWhere[Op.or] = [
+          { name: { [Op.like]: `%${search}%` } },
+          { phone: { [Op.like]: `%${search}%` } },
+        ];
       }
 
       const { count, rows } = await VisitorLog.findAndCountAll({
         where,
         include: [
-          { model: Visitor, as: 'visitor', attributes: ['id', 'uuid', 'name', 'phone', 'image', 'vehicle_number'] },
+          {
+            model: Visitor, as: 'visitor',
+            attributes: ['id', 'uuid', 'name', 'phone', 'image', 'vehicle_number'],
+            where: Object.keys(visitorWhere).length ? visitorWhere : undefined,
+            required: Object.keys(visitorWhere).length > 0,
+          },
           { model: Flat, as: 'flat' },
           { model: User, as: 'host', attributes: ['id', 'name'] },
           { model: Staff, as: 'createdByStaff', attributes: ['id', 'name'] },
         ],
         ...getPagination(page, limit),
         order: [['in_time', 'DESC']],
+        distinct: true,
       });
 
       sendSuccess(res, 'Visitor logs fetched', rows, 200, getPaginationMeta(count, page, limit));
