@@ -1,7 +1,7 @@
 import { Router, Response, NextFunction } from 'express';
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth.middleware';
 import { Block, Flat } from '../models';
-import { sendSuccess, sendCreated, sendNotFound } from '../utils/response';
+import { sendSuccess, sendCreated, sendNotFound, sendError } from '../utils/response';
 
 // ─── Block Routes ─────────────────────────────────────────────────────────────
 export const blockRouter = Router();
@@ -21,6 +21,16 @@ blockRouter.post('/', authorize('super_admin', 'admin'), async (req: AuthRequest
   try {
     const { name, society_id, total_floors, flats } = req.body;
     const targetSociety = req.user!.role === 'super_admin' ? society_id : req.user!.society_id;
+
+    // Hard-delete any soft-deleted block with the same name so the unique constraint doesn't fire
+    const existing = await Block.findOne({ where: { name, society_id: targetSociety }, paranoid: false });
+    if (existing) {
+      if (!existing.deletedAt) {
+        sendError(res, 'A block with this name already exists', 409);
+        return;
+      }
+      await existing.destroy({ force: true });
+    }
 
     const block = await Block.create({ name, society_id: targetSociety, total_floors, total_flats: flats?.length || 0 });
 

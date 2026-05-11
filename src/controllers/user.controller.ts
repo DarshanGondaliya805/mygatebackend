@@ -18,6 +18,11 @@ export class UserController {
 
       const image = req.file ? getRelativePath(req.file.path) : null;
 
+      if (!password) {
+        sendError(res, 'Password is required', 400);
+        return;
+      }
+
       // Admin can only create users within their own society
       const targetSocietyId =
         req.user!.role === 'super_admin' ? society_id : req.user!.society_id;

@@ -84,6 +84,17 @@ export class StaffController {
       sendSuccess(res, 'Staff deleted');
     } catch (err) { next(err); }
   }
+
+  async updateProfile(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const staff = await Staff.findByPk(req.user!.id);
+      if (!staff) { sendNotFound(res, 'Staff not found'); return; }
+
+      const { name, email } = req.body;
+      await staff.update({ ...(name ? { name } : {}), ...(email ? { email } : {}) });
+      sendSuccess(res, 'Profile updated', staff);
+    } catch (err) { next(err); }
+  }
 }
 
 // ─── DailyHelper Controller ───────────────────────────────────────────────────

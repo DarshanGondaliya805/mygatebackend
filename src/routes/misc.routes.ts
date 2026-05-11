@@ -20,6 +20,7 @@ staffRouter.post(
   staffController.create.bind(staffController)
 );
 staffRouter.get('/', staffController.getAll.bind(staffController));
+staffRouter.put('/profile', authorize('security'), staffController.updateProfile.bind(staffController));
 staffRouter.get('/:id', staffController.getOne.bind(staffController));
 staffRouter.put(
   '/:id',
