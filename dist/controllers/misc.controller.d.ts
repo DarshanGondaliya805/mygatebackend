@@ -6,6 +6,7 @@ export declare class StaffController {
     getOne(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
     update(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
     delete(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
+    updateProfile(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
 }
 export declare class DailyHelperController {
     create(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
@@ -13,6 +14,7 @@ export declare class DailyHelperController {
     getAllForSociety(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
     logEntry(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
     logExit(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
+    getLogs(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
 }
 export declare class EventController {
     create(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;

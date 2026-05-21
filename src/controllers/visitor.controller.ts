@@ -23,6 +23,14 @@ export class VisitorController {
       const image = req.file ? getRelativePath(req.file.path) : null;
       const societyId = bodyId(req);
 
+      // multipart/form-data sends everything as strings — parse boolean properly
+      // 'true' / true / 1 / '1' → true  |  everything else (including "false") → false
+      const isPreApproved: boolean =
+        is_pre_approved === true ||
+        is_pre_approved === 'true' ||
+        is_pre_approved === 1 ||
+        is_pre_approved === '1';
+
       const validVisitorTypes = ['guest', 'delivery', 'cab', 'courier', 'maintenance', 'other'];
       const validatedType = validVisitorTypes.includes(visitor_type) ? visitor_type : 'guest';
 
@@ -61,10 +69,10 @@ export class VisitorController {
         host_user_id: null,
         created_by: isStaff ? null : req.user!.id,
         created_by_staff: isStaff ? req.user!.id : null,
-        status: !is_pre_approved ? 'approved' : 'pending',
+        status: isPreApproved ? 'approved' : 'pending',
         purpose: purpose || null,
         in_time: new Date(),
-        is_pre_approved: !!is_pre_approved,
+        is_pre_approved: isPreApproved,
       });
 
       // Notify flat residents
@@ -75,8 +83,8 @@ export class VisitorController {
 
       if (residents.length > 0) {
         const notifPayload = {
-          title: is_pre_approved ? 'Pre-approved Visitor Arrived' : 'Visitor at Gate',
-          body: is_pre_approved
+          title: isPreApproved ? 'Pre-approved Visitor Arrived' : 'Visitor at Gate',
+          body: isPreApproved
             ? `${visitor.name} (${validatedType}) has arrived at the gate.`
             : `${visitor.name} (${validatedType}) is at the gate. Allow entry?`,
           type: 'visitor_request' as const,
@@ -96,7 +104,7 @@ export class VisitorController {
             image: visitor.image,
             purpose: log.purpose,
             status: log.status,
-            is_pre_approved: log.is_pre_approved,
+            is_pre_approved: isPreApproved,   // use parsed boolean, not raw DB value
             flat_id: log.flat_id,
             society_id: log.society_id,
             in_time: log.in_time,
@@ -348,6 +356,52 @@ export class VisitorController {
       });
 
       sendSuccess(res, 'Visitor logs fetched', { visitor, logs: rows }, 200, getPaginationMeta(count, page, limit));
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // GET /pending-requests — Returns pending visitor requests created in the last 30 seconds for the user's flat
+  async getRecentPendingRequests(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const seconds = parseInt(req.query.seconds as string) || 30;
+      const since = new Date(Date.now() - seconds * 1000);
+
+      const where: any = {
+        status: 'pending',
+        createdAt: { [Op.gte]: since },
+      };
+
+      // Scope to user's flat & society
+      if (req.user!.role === 'user') {
+        where.flat_id = req.user!.dbUser?.flat_id;
+        where.society_id = req.user!.society_id;
+      } else {
+        const sid = queryId(req);
+        if (sid) where.society_id = sid;
+        if (req.query.flat_id) where.flat_id = req.query.flat_id;
+      }
+
+      const requests = await VisitorLog.findAll({
+        where,
+        include: [
+          {
+            model: Visitor,
+            as: 'visitor',
+            attributes: ['id', 'uuid', 'name', 'phone', 'image', 'vehicle_number'],
+          },
+          { model: Flat, as: 'flat', attributes: ['id', 'flat_number'] },
+          { model: Staff, as: 'createdByStaff', attributes: ['id', 'name'] },
+        ],
+        order: [['createdAt', 'DESC']],
+      });
+
+      sendSuccess(res, 'Pending requests fetched', {
+        has_pending: requests.length > 0,
+        count: requests.length,
+        requests,
+        checked_window_seconds: seconds,
+      });
     } catch (err) {
       next(err);
     }

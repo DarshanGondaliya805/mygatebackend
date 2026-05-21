@@ -22,12 +22,16 @@ router.post('/', (0, auth_middleware_1.authorize)('security', 'admin', 'super_ad
 router.post('/pre-approve', (0, auth_middleware_1.authorize)('user', 'admin'), visitor_controller_1.default.preApprove.bind(visitor_controller_1.default));
 // Look up repeat visitor profile by phone (for auto-fill)
 router.get('/lookup/:phone', (0, auth_middleware_1.authorize)('security', 'admin', 'super_admin'), visitor_controller_1.default.getByPhone.bind(visitor_controller_1.default));
+// User / security: poll for pending requests created in last N seconds (default 30)
+router.get('/pending-requests', visitor_controller_1.default.getRecentPendingRequests.bind(visitor_controller_1.default));
 // List all visitor logs (filtered by role, supports date / date range / type / status / flat)
 router.get('/', visitor_controller_1.default.getAll.bind(visitor_controller_1.default));
 // Get all visit logs for a specific visitor profile
 router.get('/:id/logs', visitor_controller_1.default.getVisitorLogs.bind(visitor_controller_1.default));
 // User: approve / reject a visitor log entry
 router.put('/:id/status', (0, auth_middleware_1.authorize)('user', 'admin'), visitor_controller_1.default.updateStatus.bind(visitor_controller_1.default));
+// Security: approve / reject visitor only if resident hasn't acted yet (status = pending)
+router.put('/:id/security-override', (0, auth_middleware_1.authorize)('security', 'admin', 'super_admin'), visitor_controller_1.default.securityOverrideStatus.bind(visitor_controller_1.default));
 // Security: mark visitor checkout (sets out_time)
 router.put('/:id/checkout', (0, auth_middleware_1.authorize)('security', 'admin', 'super_admin'), visitor_controller_1.default.checkout.bind(visitor_controller_1.default));
 exports.default = router;

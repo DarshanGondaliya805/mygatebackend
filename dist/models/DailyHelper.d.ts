@@ -48,10 +48,12 @@ export interface HelperEntryLogAttributes {
     in_time: Date;
     out_time?: Date | null;
     created_by?: number | null;
+    created_by_staff?: number | null;
     createdAt?: Date;
     updatedAt?: Date;
+    deletedAt?: Date | null;
 }
-export interface HelperEntryLogCreationAttributes extends Optional<HelperEntryLogAttributes, 'id' | 'uuid' | 'out_time' | 'created_by'> {
+export interface HelperEntryLogCreationAttributes extends Optional<HelperEntryLogAttributes, 'id' | 'uuid' | 'out_time' | 'created_by' | 'created_by_staff'> {
 }
 export declare class HelperEntryLog extends Model<HelperEntryLogAttributes, HelperEntryLogCreationAttributes> implements HelperEntryLogAttributes {
     id: number;
@@ -61,8 +63,10 @@ export declare class HelperEntryLog extends Model<HelperEntryLogAttributes, Help
     in_time: Date;
     out_time: Date | null;
     created_by: number | null;
+    created_by_staff: number | null;
     readonly createdAt: Date;
     readonly updatedAt: Date;
+    readonly deletedAt: Date | null;
     readonly helper?: any;
     static initModel(sequelize: Sequelize): typeof HelperEntryLog;
 }

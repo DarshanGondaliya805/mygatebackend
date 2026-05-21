@@ -16,6 +16,10 @@ class UserController {
         try {
             const { name, email, phone, password, gender, dob, role, user_type, flat_id, society_id, } = req.body;
             const image = req.file ? (0, upload_1.getRelativePath)(req.file.path) : null;
+            if (!password) {
+                (0, response_1.sendError)(res, 'Password is required', 400);
+                return;
+            }
             // Admin can only create users within their own society
             const targetSocietyId = req.user.role === 'super_admin' ? society_id : req.user.society_id;
             const salt = await bcryptjs_1.default.genSalt(12);

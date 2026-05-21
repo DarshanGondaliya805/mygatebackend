@@ -36,7 +36,8 @@ class HelperEntryLog extends sequelize_1.Model {
             in_time: { type: sequelize_1.DataTypes.DATE, allowNull: false },
             out_time: { type: sequelize_1.DataTypes.DATE, allowNull: true },
             created_by: { type: sequelize_1.DataTypes.INTEGER, allowNull: true },
-        }, { sequelize, tableName: 'helper_entry_logs', timestamps: true });
+            created_by_staff: { type: sequelize_1.DataTypes.INTEGER, allowNull: true },
+        }, { sequelize, tableName: 'helper_entry_logs', paranoid: true, timestamps: true });
         return HelperEntryLog;
     }
 }

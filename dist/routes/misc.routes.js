@@ -10,6 +10,7 @@ exports.staffRouter = (0, express_1.Router)();
 exports.staffRouter.use(auth_middleware_1.authenticate);
 exports.staffRouter.post('/', (0, auth_middleware_1.authorize)('super_admin', 'admin'), (0, upload_1.uploadFields)([{ name: 'image', maxCount: 1 }, { name: 'documents', maxCount: 5 }]), misc_controller_1.staffController.create.bind(misc_controller_1.staffController));
 exports.staffRouter.get('/', misc_controller_1.staffController.getAll.bind(misc_controller_1.staffController));
+exports.staffRouter.put('/profile', (0, auth_middleware_1.authorize)('security'), misc_controller_1.staffController.updateProfile.bind(misc_controller_1.staffController));
 exports.staffRouter.get('/:id', misc_controller_1.staffController.getOne.bind(misc_controller_1.staffController));
 exports.staffRouter.put('/:id', (0, auth_middleware_1.authorize)('super_admin', 'admin'), (0, upload_1.uploadFields)([{ name: 'image', maxCount: 1 }, { name: 'documents', maxCount: 5 }]), misc_controller_1.staffController.update.bind(misc_controller_1.staffController));
 exports.staffRouter.delete('/:id', (0, auth_middleware_1.authorize)('super_admin', 'admin'), misc_controller_1.staffController.delete.bind(misc_controller_1.staffController));
@@ -21,6 +22,7 @@ exports.helperRouter.get('/my', (0, auth_middleware_1.authorize)('user'), misc_c
 exports.helperRouter.get('/', (0, auth_middleware_1.authorize)('admin', 'super_admin', 'security'), misc_controller_1.dailyHelperController.getAllForSociety.bind(misc_controller_1.dailyHelperController));
 exports.helperRouter.post('/entry', (0, auth_middleware_1.authorize)('security', 'admin'), misc_controller_1.dailyHelperController.logEntry.bind(misc_controller_1.dailyHelperController));
 exports.helperRouter.put('/:helper_id/exit', (0, auth_middleware_1.authorize)('security', 'admin'), misc_controller_1.dailyHelperController.logExit.bind(misc_controller_1.dailyHelperController));
+exports.helperRouter.get('/logs', (0, auth_middleware_1.authorize)('security', 'admin', 'super_admin'), misc_controller_1.dailyHelperController.getLogs.bind(misc_controller_1.dailyHelperController));
 // ─── Event Routes ─────────────────────────────────────────────────────────────
 exports.eventRouter = (0, express_1.Router)();
 exports.eventRouter.use(auth_middleware_1.authenticate);

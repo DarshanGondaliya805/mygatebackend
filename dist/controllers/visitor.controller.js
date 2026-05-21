@@ -55,7 +55,7 @@ class VisitorController {
                 host_user_id: null,
                 created_by: isStaff ? null : req.user.id,
                 created_by_staff: isStaff ? req.user.id : null,
-                status: is_pre_approved ? 'approved' : 'pending',
+                status: !is_pre_approved ? 'approved' : 'pending',
                 purpose: purpose || null,
                 in_time: new Date(),
                 is_pre_approved: !!is_pre_approved,
@@ -152,6 +152,44 @@ class VisitorController {
             next(err);
         }
     }
+    // PUT /:id/security-override — Security approves/rejects if resident hasn't acted yet
+    async securityOverrideStatus(req, res, next) {
+        try {
+            const { status } = req.body;
+            if (!['approved', 'rejected'].includes(status)) {
+                res.status(400).json({ success: false, message: 'Status must be approved or rejected' });
+                return;
+            }
+            const log = await models_1.VisitorLog.findByPk(req.params.id, {
+                include: [{ model: models_1.Visitor, as: 'visitor' }],
+            });
+            if (!log) {
+                (0, response_1.sendNotFound)(res, 'Visitor log not found');
+                return;
+            }
+            if (log.status !== 'pending') {
+                res.status(400).json({
+                    success: false,
+                    message: `Cannot override — resident has already ${log.status} this visitor`,
+                });
+                return;
+            }
+            await log.update({ status });
+            const visitor = log.visitor;
+            socket_service_1.default.emitToSocietySecurity(log.society_id, 'visitor_status_update', {
+                log_id: log.id,
+                visitor_id: log.visitor_id,
+                name: visitor?.name,
+                status: log.status,
+                flat_id: log.flat_id,
+                society_id: log.society_id,
+            });
+            (0, response_1.sendSuccess)(res, `Visitor ${status} by security`, log);
+        }
+        catch (err) {
+            next(err);
+        }
+    }
     // PUT /:id/checkout — Security marks visitor as checked out
     async checkout(req, res, next) {
         try {
@@ -197,17 +235,16 @@ class VisitorController {
             next(err);
         }
     }
-    // GET / — List all visitor logs (filtered by role)
+    // GET / — List all visitor logs (filtered by role, supports search by name/phone)
     async getAll(req, res, next) {
         try {
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 20;
-            const { visitor_type, status, flat_id, date, start_date, end_date } = req.query;
+            const { visitor_type, status, flat_id, date, start_date, end_date, search } = req.query;
             const where = {};
             const sid = queryId(req);
             if (sid)
                 where.society_id = sid;
-            // Regular users only see their flat's logs
             if (req.user.role === 'user') {
                 where.flat_id = req.user.dbUser?.flat_id;
             }
@@ -218,7 +255,6 @@ class VisitorController {
                 where.visitor_type = visitor_type;
             if (status)
                 where.status = status;
-            // Single date filter (whole day)
             if (date) {
                 const start = new Date(date);
                 start.setHours(0, 0, 0, 0);
@@ -227,7 +263,6 @@ class VisitorController {
                 where.in_time = { [sequelize_1.Op.between]: [start, end] };
             }
             else if (start_date || end_date) {
-                // Date range filter
                 const range = {};
                 if (start_date) {
                     const s = new Date(start_date);
@@ -241,16 +276,29 @@ class VisitorController {
                 }
                 where.in_time = range;
             }
+            const visitorWhere = {};
+            if (search) {
+                visitorWhere[sequelize_1.Op.or] = [
+                    { name: { [sequelize_1.Op.like]: `%${search}%` } },
+                    { phone: { [sequelize_1.Op.like]: `%${search}%` } },
+                ];
+            }
             const { count, rows } = await models_1.VisitorLog.findAndCountAll({
                 where,
                 include: [
-                    { model: models_1.Visitor, as: 'visitor', attributes: ['id', 'uuid', 'name', 'phone', 'image', 'vehicle_number'] },
+                    {
+                        model: models_1.Visitor, as: 'visitor',
+                        attributes: ['id', 'uuid', 'name', 'phone', 'image', 'vehicle_number'],
+                        where: Object.keys(visitorWhere).length ? visitorWhere : undefined,
+                        required: Object.keys(visitorWhere).length > 0,
+                    },
                     { model: models_1.Flat, as: 'flat' },
                     { model: models_1.User, as: 'host', attributes: ['id', 'name'] },
                     { model: models_1.Staff, as: 'createdByStaff', attributes: ['id', 'name'] },
                 ],
                 ...(0, response_1.getPagination)(page, limit),
                 order: [['in_time', 'DESC']],
+                distinct: true,
             });
             (0, response_1.sendSuccess)(res, 'Visitor logs fetched', rows, 200, (0, response_1.getPaginationMeta)(count, page, limit));
         }
@@ -286,6 +334,51 @@ class VisitorController {
                 order: [['in_time', 'DESC']],
             });
             (0, response_1.sendSuccess)(res, 'Visitor logs fetched', { visitor, logs: rows }, 200, (0, response_1.getPaginationMeta)(count, page, limit));
+        }
+        catch (err) {
+            next(err);
+        }
+    }
+    // GET /pending-requests — Returns pending visitor requests created in the last 30 seconds for the user's flat
+    async getRecentPendingRequests(req, res, next) {
+        try {
+            const seconds = parseInt(req.query.seconds) || 30;
+            const since = new Date(Date.now() - seconds * 1000);
+            const where = {
+                status: 'pending',
+                createdAt: { [sequelize_1.Op.gte]: since },
+            };
+            // Scope to user's flat & society
+            if (req.user.role === 'user') {
+                where.flat_id = req.user.dbUser?.flat_id;
+                where.society_id = req.user.society_id;
+            }
+            else {
+                const sid = queryId(req);
+                if (sid)
+                    where.society_id = sid;
+                if (req.query.flat_id)
+                    where.flat_id = req.query.flat_id;
+            }
+            const requests = await models_1.VisitorLog.findAll({
+                where,
+                include: [
+                    {
+                        model: models_1.Visitor,
+                        as: 'visitor',
+                        attributes: ['id', 'uuid', 'name', 'phone', 'image', 'vehicle_number'],
+                    },
+                    { model: models_1.Flat, as: 'flat', attributes: ['id', 'flat_number'] },
+                    { model: models_1.Staff, as: 'createdByStaff', attributes: ['id', 'name'] },
+                ],
+                order: [['createdAt', 'DESC']],
+            });
+            (0, response_1.sendSuccess)(res, 'Pending requests fetched', {
+                has_pending: requests.length > 0,
+                count: requests.length,
+                requests,
+                checked_window_seconds: seconds,
+            });
         }
         catch (err) {
             next(err);

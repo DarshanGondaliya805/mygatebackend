@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.amenityController = exports.policyController = exports.serviceContactController = exports.eventController = exports.dailyHelperController = exports.staffController = exports.AmenityController = exports.PolicyController = exports.ServiceContactController = exports.EventController = exports.DailyHelperController = exports.StaffController = void 0;
+const sequelize_1 = require("sequelize");
 const models_1 = require("../models");
 const response_1 = require("../utils/response");
 const upload_1 = require("../utils/upload");
@@ -102,6 +103,21 @@ class StaffController {
             next(err);
         }
     }
+    async updateProfile(req, res, next) {
+        try {
+            const staff = await models_1.Staff.findByPk(req.user.id);
+            if (!staff) {
+                (0, response_1.sendNotFound)(res, 'Staff not found');
+                return;
+            }
+            const { name, email } = req.body;
+            await staff.update({ ...(name ? { name } : {}), ...(email ? { email } : {}) });
+            (0, response_1.sendSuccess)(res, 'Profile updated', staff);
+        }
+        catch (err) {
+            next(err);
+        }
+    }
 }
 exports.StaffController = StaffController;
 // ─── DailyHelper Controller ───────────────────────────────────────────────────
@@ -145,12 +161,39 @@ class DailyHelperController {
             const sid = queryId(req);
             if (sid)
                 where.society_id = sid;
+            const todayStart = new Date();
+            todayStart.setHours(0, 0, 0, 0);
+            const todayEnd = new Date();
+            todayEnd.setHours(23, 59, 59, 999);
             const { count, rows } = await models_1.DailyHelper.findAndCountAll({
                 where,
+                include: [
+                    {
+                        model: models_1.HelperEntryLog,
+                        as: 'entryLogs',
+                        required: false,
+                        where: { in_time: { [sequelize_1.Op.between]: [todayStart, todayEnd] } },
+                        attributes: ['id', 'in_time', 'out_time'],
+                    },
+                ],
                 ...(0, response_1.getPagination)(page, limit),
                 order: [['name', 'ASC']],
+                distinct: true,
             });
-            (0, response_1.sendSuccess)(res, 'All helpers fetched', rows, 200, (0, response_1.getPaginationMeta)(count, page, limit));
+            const result = rows.map((helper) => {
+                const logs = (helper.entryLogs ?? []).sort((a, b) => new Date(b.in_time).getTime() - new Date(a.in_time).getTime());
+                const latestLog = logs[0] ?? null;
+                const helperData = helper.toJSON();
+                delete helperData.entryLogs;
+                // isEntry=1 only if currently inside (entered but not yet exited)
+                const currentlyInside = latestLog && !latestLog.out_time;
+                return {
+                    ...helperData,
+                    isEntry: currentlyInside ? '1' : '0',
+                    isExit: latestLog?.out_time ? '1' : null,
+                };
+            });
+            (0, response_1.sendSuccess)(res, 'All helpers fetched', result, 200, (0, response_1.getPaginationMeta)(count, page, limit));
         }
         catch (err) {
             next(err);
@@ -159,11 +202,13 @@ class DailyHelperController {
     async logEntry(req, res, next) {
         try {
             const { daily_helper_id } = req.body;
+            const isStaff = req.user.role === 'security';
             const log = await models_1.HelperEntryLog.create({
                 daily_helper_id,
                 society_id: bodyId(req),
                 in_time: new Date(),
-                created_by: req.user.id,
+                created_by: isStaff ? null : req.user.id,
+                created_by_staff: isStaff ? req.user.id : null,
             });
             (0, response_1.sendCreated)(res, 'Entry logged', log);
         }
@@ -183,6 +228,50 @@ class DailyHelperController {
             }
             await log.update({ out_time: new Date() });
             (0, response_1.sendSuccess)(res, 'Exit logged', log);
+        }
+        catch (err) {
+            next(err);
+        }
+    }
+    async getLogs(req, res, next) {
+        try {
+            const page = parseInt(req.query.page) || 1;
+            const limit = parseInt(req.query.limit) || 20;
+            const { helper_id, date, start_date, end_date } = req.query;
+            const where = {};
+            const sid = queryId(req);
+            if (sid)
+                where.society_id = sid;
+            if (helper_id)
+                where.daily_helper_id = helper_id;
+            if (date) {
+                const s = new Date(date);
+                s.setHours(0, 0, 0, 0);
+                const e = new Date(date);
+                e.setHours(23, 59, 59, 999);
+                where.in_time = { [sequelize_1.Op.between]: [s, e] };
+            }
+            else if (start_date || end_date) {
+                const range = {};
+                if (start_date) {
+                    const s = new Date(start_date);
+                    s.setHours(0, 0, 0, 0);
+                    range[sequelize_1.Op.gte] = s;
+                }
+                if (end_date) {
+                    const e = new Date(end_date);
+                    e.setHours(23, 59, 59, 999);
+                    range[sequelize_1.Op.lte] = e;
+                }
+                where.in_time = range;
+            }
+            const { count, rows } = await models_1.HelperEntryLog.findAndCountAll({
+                where,
+                include: [{ model: models_1.DailyHelper, as: 'helper', attributes: ['id', 'name', 'phone', 'helper_type', 'image'] }],
+                ...(0, response_1.getPagination)(page, limit),
+                order: [['in_time', 'DESC']],
+            });
+            (0, response_1.sendSuccess)(res, 'Helper entry logs fetched', rows, 200, (0, response_1.getPaginationMeta)(count, page, limit));
         }
         catch (err) {
             next(err);

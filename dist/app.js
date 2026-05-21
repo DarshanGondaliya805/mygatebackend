@@ -71,7 +71,7 @@ app.use('/uploads', express_1.default.static(path_1.default.resolve(app_1.defaul
 app.get('/health', (req, res) => {
     res.json({
         success: true,
-        message: 'MyGate API is running',
+        message: 'MyGate API is running pratik',
         env: app_1.default.env,
         timestamp: new Date().toISOString(),
     });

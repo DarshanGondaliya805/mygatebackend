@@ -25,6 +25,15 @@ exports.blockRouter.post('/', (0, auth_middleware_1.authorize)('super_admin', 'a
     try {
         const { name, society_id, total_floors, flats } = req.body;
         const targetSociety = req.user.role === 'super_admin' ? society_id : req.user.society_id;
+        // Hard-delete any soft-deleted block with the same name so the unique constraint doesn't fire
+        const existing = await models_1.Block.findOne({ where: { name, society_id: targetSociety }, paranoid: false });
+        if (existing) {
+            if (!existing.deletedAt) {
+                (0, response_1.sendError)(res, 'A block with this name already exists', 409);
+                return;
+            }
+            await existing.destroy({ force: true });
+        }
         const block = await models_1.Block.create({ name, society_id: targetSociety, total_floors, total_flats: flats?.length || 0 });
         if (flats && Array.isArray(flats)) {
             await models_1.Flat.bulkCreate(flats.map((f) => ({

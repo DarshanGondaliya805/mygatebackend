@@ -106,6 +106,8 @@ DailyHelper_1.DailyHelper.belongsTo(Society_1.Society, { foreignKey: 'society_id
 // HelperEntryLog associations
 DailyHelper_1.DailyHelper.hasMany(HelperEntryLog_1.HelperEntryLog, { foreignKey: 'daily_helper_id', as: 'entryLogs' });
 HelperEntryLog_1.HelperEntryLog.belongsTo(DailyHelper_1.DailyHelper, { foreignKey: 'daily_helper_id', as: 'helper' });
+Staff_1.Staff.hasMany(HelperEntryLog_1.HelperEntryLog, { foreignKey: 'created_by_staff', as: 'helperEntryLogs' });
+HelperEntryLog_1.HelperEntryLog.belongsTo(Staff_1.Staff, { foreignKey: 'created_by_staff', as: 'createdByStaff' });
 // Complaint associations
 User_1.User.hasMany(Complaint_1.Complaint, { foreignKey: 'raised_by', as: 'complaints' });
 Complaint_1.Complaint.belongsTo(User_1.User, { foreignKey: 'raised_by', as: 'raisedBy' });

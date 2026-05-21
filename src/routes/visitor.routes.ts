@@ -28,6 +28,9 @@ router.post('/pre-approve', authorize('user', 'admin'), visitorController.preApp
 // Look up repeat visitor profile by phone (for auto-fill)
 router.get('/lookup/:phone', authorize('security', 'admin', 'super_admin'), visitorController.getByPhone.bind(visitorController));
 
+// User / security: poll for pending requests created in last N seconds (default 30)
+router.get('/pending-requests', visitorController.getRecentPendingRequests.bind(visitorController));
+
 // List all visitor logs (filtered by role, supports date / date range / type / status / flat)
 router.get('/', visitorController.getAll.bind(visitorController));
 
