@@ -6,6 +6,7 @@ import { sendSuccess, sendCreated, sendNotFound, getPagination, getPaginationMet
 import { getRelativePath } from '../utils/upload';
 import notificationService from '../services/notification.service';
 import socketService from '../services/socket.service';
+import logger from '../utils/logger';
 
 const bodyId = (req: AuthRequest): number =>
   req.user!.role === 'super_admin' ? req.body.society_id : req.user!.society_id!;
@@ -136,30 +137,8 @@ export class VisitorController {
 
       const visitor = (log as any).visitor as Visitor;
 
-      // Notify the security guard who created the entry
-      if (log.created_by) {
-        await notificationService.send({
-          user_id: log.created_by,
-          title: `Visitor ${status === 'approved' ? 'Approved' : 'Rejected'}`,
-          body: `${visitor?.name}'s entry has been ${status} by the resident.`,
-          type: status === 'approved' ? 'visitor_approved' : 'visitor_rejected',
-          reference_id: log.id,
-          reference_type: 'visitor',
-        });
-
-        socketService.emitToUser(log.created_by, 'visitor_status_update', {
-          log_id: log.id,
-          visitor_id: log.visitor_id,
-          name: visitor?.name,
-          status: log.status,
-          flat_id: log.flat_id,
-          society_id: log.society_id,
-          out_time: log.out_time,
-        });
-      }
-
-      // Broadcast to all security in the society
-      socketService.emitToSocietySecurity(log.society_id, 'visitor_status_update', {
+      // triggered_by:'resident' tells Flutter security app to call security-override as ACK
+      const statusPayload = {
         log_id: log.id,
         visitor_id: log.visitor_id,
         name: visitor?.name,
@@ -167,7 +146,41 @@ export class VisitorController {
         flat_id: log.flat_id,
         society_id: log.society_id,
         out_time: log.out_time,
-      });
+        triggered_by: 'resident',
+      };
+
+      logger.info(
+        `[updateStatus] log_id=${log.id} new_status=${log.status} ` +
+        `created_by=${log.created_by} created_by_staff=${log.created_by_staff} ` +
+        `society_id=${log.society_id}`
+      );
+
+      const statusTitle = `Visitor ${status === 'approved' ? 'Approved ✅' : 'Rejected ❌'}`;
+      const statusBody  = `${visitor?.name}'s entry has been ${status} by the resident.`;
+      const statusType  = status === 'approved' ? 'visitor_approved' : 'visitor_rejected';
+
+      // Case A — entry was created by a resident/admin (created_by is set)
+      if (log.created_by) {
+        logger.info(`[updateStatus] notifying resident created_by=${log.created_by}`);
+        await notificationService.send({
+          user_id: log.created_by,
+          title: statusTitle,
+          body: statusBody,
+          type: statusType,
+          reference_id: log.id,
+          reference_type: 'visitor',
+        });
+        socketService.emitToUser(log.created_by, 'visitor_status_update', statusPayload);
+      }
+
+      // Case B — entry was created by a security staff member (created_by_staff is set)
+      if (log.created_by_staff) {
+        logger.info(`[updateStatus] notifying security staff created_by_staff=${log.created_by_staff}`);
+        socketService.emitToStaff(log.created_by_staff, 'visitor_status_update', statusPayload);
+      }
+
+      // Broadcast to ALL security guards in the society regardless of who created the entry
+      socketService.emitToSocietySecurity(log.society_id, 'visitor_status_update', statusPayload);
 
       sendSuccess(res, `Visitor ${status} successfully`, log);
     } catch (err) {
@@ -175,7 +188,10 @@ export class VisitorController {
     }
   }
 
-  // PUT /:id/security-override — Security approves/rejects if resident hasn't acted yet
+  // PUT /:id/security-override — Two modes:
+  //   1. status=pending  → security decides before resident responds (override)
+  //   2. status=approved → security confirms physical entry after resident already approved (ack)
+  //   3. status=rejected → security can still reject even if resident approved (security veto)
   async securityOverrideStatus(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { status } = req.body;
@@ -190,28 +206,59 @@ export class VisitorController {
       });
       if (!log) { sendNotFound(res, 'Visitor log not found'); return; }
 
-      if (log.status !== 'pending') {
-        res.status(400).json({
-          success: false,
-          message: `Cannot override — resident has already ${log.status} this visitor`,
-        });
+      // Block only if already checked out — every other status is actionable by security
+      if (log.status === 'checked_out') {
+        res.status(400).json({ success: false, message: 'Visitor already checked out' });
         return;
       }
+
+      // Determine action mode for response message
+      const isOverride   = log.status === 'pending';        // security deciding before resident
+      const isAck        = log.status === 'approved' && status === 'approved'; // confirming entry
+      const isVeto       = log.status === 'approved' && status === 'rejected'; // security vetoing
+
+      logger.info(
+        `[securityOverride] log_id=${log.id} prev=${log.status} new=${status} ` +
+        `mode=${isOverride ? 'override' : isAck ? 'ack' : isVeto ? 'veto' : 'update'}`
+      );
 
       await log.update({ status });
 
       const visitor = (log as any).visitor as Visitor;
 
-      socketService.emitToSocietySecurity(log.society_id, 'visitor_status_update', {
+      // triggered_by:'security' tells Flutter NOT to call security-override again (prevents loop)
+      const socketPayload = {
         log_id: log.id,
         visitor_id: log.visitor_id,
         name: visitor?.name,
         status: log.status,
         flat_id: log.flat_id,
         society_id: log.society_id,
-      });
+        triggered_by: 'security',
+      };
 
-      sendSuccess(res, `Visitor ${status} by security`, log);
+      socketService.emitToSocietySecurity(log.society_id, 'visitor_status_update', socketPayload);
+
+      // If security vetoes an already-resident-approved entry, notify the resident
+      if (isVeto) {
+        const residents = await User.findAll({
+          where: { flat_id: log.flat_id, is_active: true, is_approved: true, role: 'user' },
+          attributes: ['id'],
+        });
+        for (const r of residents) {
+          socketService.emitToUser(r.id, 'visitor_status_update', socketPayload);
+        }
+      }
+
+      const message = isOverride
+        ? `Visitor ${status} by security`
+        : isAck
+        ? 'Visitor entry confirmed by security'
+        : isVeto
+        ? 'Visitor entry vetoed by security'
+        : `Visitor ${status} by security`;
+
+      sendSuccess(res, message, log);
     } catch (err) {
       next(err);
     }
