@@ -19,6 +19,7 @@ export interface StaffAttributes {
   address?: string | null;
   documents?: string[] | null;
   password?: string | null;
+  fcm_token?: string | null;
   society_id: number;
   is_active: boolean;
   joining_date?: string | null;
@@ -29,7 +30,7 @@ export interface StaffAttributes {
 }
 
 export interface StaffCreationAttributes
-  extends Optional<StaffAttributes, 'id' | 'uuid' | 'email' | 'image' | 'dob' | 'gender' | 'salary' | 'salary_type' | 'address' | 'documents' | 'password' | 'is_active' | 'joining_date'> {}
+  extends Optional<StaffAttributes, 'id' | 'uuid' | 'email' | 'image' | 'dob' | 'gender' | 'salary' | 'salary_type' | 'address' | 'documents' | 'password' | 'fcm_token' | 'is_active' | 'joining_date'> {}
 
 export class Staff
   extends Model<StaffAttributes, StaffCreationAttributes>
@@ -49,6 +50,7 @@ export class Staff
   public address!: string | null;
   public documents!: string[] | null;
   public password!: string | null;
+  public fcm_token!: string | null;
   public society_id!: number;
   public is_active!: boolean;
   public joining_date!: string | null;
@@ -82,6 +84,7 @@ export class Staff
         address: { type: DataTypes.TEXT, allowNull: true },
         documents: { type: DataTypes.JSON, allowNull: true },
         password: { type: DataTypes.STRING(255), allowNull: true },
+        fcm_token: { type: DataTypes.STRING(255), allowNull: true },
         society_id: { type: DataTypes.INTEGER, allowNull: false },
         is_active: { type: DataTypes.BOOLEAN, defaultValue: true },
         joining_date: { type: DataTypes.DATEONLY, allowNull: true },

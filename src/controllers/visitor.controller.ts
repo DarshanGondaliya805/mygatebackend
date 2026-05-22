@@ -1,11 +1,10 @@
 import { Response, NextFunction } from 'express';
 import { Op } from 'sequelize';
 import { AuthRequest } from '../middlewares/auth.middleware';
-import { Visitor, VisitorLog, User, Flat, Staff } from '../models';
+import { Visitor, VisitorLog, User, Flat, Block, Staff } from '../models';
 import { sendSuccess, sendCreated, sendNotFound, getPagination, getPaginationMeta } from '../utils/response';
 import { getRelativePath } from '../utils/upload';
 import notificationService from '../services/notification.service';
-import socketService from '../services/socket.service';
 import logger from '../utils/logger';
 
 const bodyId = (req: AuthRequest): number =>
@@ -13,6 +12,13 @@ const bodyId = (req: AuthRequest): number =>
 
 const queryId = (req: AuthRequest): number | undefined =>
   req.user!.role === 'super_admin' ? (req.query.society_id as any) : req.user!.society_id!;
+
+// Convert any value to a string safe for FCM data payloads
+function s(val: any): string {
+  if (val === null || val === undefined) return '';
+  if (val instanceof Date) return val.toISOString();
+  return String(val);
+}
 
 export class VisitorController {
 
@@ -25,7 +31,6 @@ export class VisitorController {
       const societyId = bodyId(req);
 
       // multipart/form-data sends everything as strings — parse boolean properly
-      // 'true' / true / 1 / '1' → true  |  everything else (including "false") → false
       const isPreApproved: boolean =
         is_pre_approved === true ||
         is_pre_approved === 'true' ||
@@ -76,7 +81,7 @@ export class VisitorController {
         is_pre_approved: isPreApproved,
       });
 
-      // Notify flat residents
+      // Notify flat residents via push notification + FCM data message
       const residents = await User.findAll({
         where: { flat_id: parsedFlatId, is_active: true, is_approved: true, role: 'user' },
         attributes: ['id'],
@@ -95,22 +100,26 @@ export class VisitorController {
 
         await notificationService.sendToMany(residents.map((r) => r.id), notifPayload);
 
-        for (const r of residents) {
-          socketService.emitToUser(r.id, 'visitor_request', {
-            log_id: log.id,
-            visitor_id: visitor.id,
-            name: visitor.name,
-            phone: visitor.phone,
-            visitor_type: log.visitor_type,
-            image: visitor.image,
-            purpose: log.purpose,
-            status: log.status,
-            is_pre_approved: isPreApproved,   // use parsed boolean, not raw DB value
-            flat_id: log.flat_id,
-            society_id: log.society_id,
-            in_time: log.in_time,
-          });
-        }
+        // Send real-time data message so the app can show the visitor request instantly
+        const fcmData: Record<string, string> = {
+          type: 'visitor_request',
+          log_id: s(log.id),
+          visitor_id: s(visitor.id),
+          name: s(visitor.name),
+          phone: s(visitor.phone),
+          visitor_type: s(log.visitor_type),
+          image: s(visitor.image),
+          purpose: s(log.purpose),
+          status: s(log.status),
+          is_pre_approved: s(isPreApproved),
+          flat_id: s(log.flat_id),
+          society_id: s(log.society_id),
+          in_time: s(log.in_time),
+        };
+
+        await Promise.allSettled(
+          residents.map((r) => notificationService.sendDataToUser(r.id, fcmData))
+        );
       }
 
       sendCreated(res, 'Visitor entry created', { visitor, log });
@@ -137,18 +146,6 @@ export class VisitorController {
 
       const visitor = (log as any).visitor as Visitor;
 
-      // triggered_by:'resident' tells Flutter security app to call security-override as ACK
-      const statusPayload = {
-        log_id: log.id,
-        visitor_id: log.visitor_id,
-        name: visitor?.name,
-        status: log.status,
-        flat_id: log.flat_id,
-        society_id: log.society_id,
-        out_time: log.out_time,
-        triggered_by: 'resident',
-      };
-
       logger.info(
         `[updateStatus] log_id=${log.id} new_status=${log.status} ` +
         `created_by=${log.created_by} created_by_staff=${log.created_by_staff} ` +
@@ -159,28 +156,41 @@ export class VisitorController {
       const statusBody  = `${visitor?.name}'s entry has been ${status} by the resident.`;
       const statusType  = status === 'approved' ? 'visitor_approved' : 'visitor_rejected';
 
-      // Case A — entry was created by a resident/admin (created_by is set)
+      // FCM data payload for real-time update on security app
+      const fcmData: Record<string, string> = {
+        type: 'visitor_status_update',
+        log_id: s(log.id),
+        visitor_id: s(log.visitor_id),
+        name: s(visitor?.name),
+        status: s(log.status),
+        flat_id: s(log.flat_id),
+        society_id: s(log.society_id),
+        out_time: s(log.out_time),
+        triggered_by: 'resident',
+      };
+
+      // Notify the resident/user who created the entry
       if (log.created_by) {
         logger.info(`[updateStatus] notifying resident created_by=${log.created_by}`);
         await notificationService.send({
           user_id: log.created_by,
           title: statusTitle,
           body: statusBody,
-          type: statusType,
+          type: statusType as any,
           reference_id: log.id,
           reference_type: 'visitor',
         });
-        socketService.emitToUser(log.created_by, 'visitor_status_update', statusPayload);
+        await notificationService.sendDataToUser(log.created_by, fcmData);
       }
 
-      // Case B — entry was created by a security staff member (created_by_staff is set)
+      // Notify the security staff who created the entry
       if (log.created_by_staff) {
         logger.info(`[updateStatus] notifying security staff created_by_staff=${log.created_by_staff}`);
-        socketService.emitToStaff(log.created_by_staff, 'visitor_status_update', statusPayload);
+        await notificationService.sendAlertToStaff(log.created_by_staff, statusTitle, statusBody, fcmData);
       }
 
-      // Broadcast to ALL security guards in the society regardless of who created the entry
-      socketService.emitToSocietySecurity(log.society_id, 'visitor_status_update', statusPayload);
+      // Broadcast status update to ALL security guards in the society
+      await notificationService.sendAlertToSocietySecurity(log.society_id, statusTitle, statusBody, fcmData);
 
       sendSuccess(res, `Visitor ${status} successfully`, log);
     } catch (err) {
@@ -188,10 +198,7 @@ export class VisitorController {
     }
   }
 
-  // PUT /:id/security-override — Two modes:
-  //   1. status=pending  → security decides before resident responds (override)
-  //   2. status=approved → security confirms physical entry after resident already approved (ack)
-  //   3. status=rejected → security can still reject even if resident approved (security veto)
+  // PUT /:id/security-override
   async securityOverrideStatus(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { status } = req.body;
@@ -206,16 +213,14 @@ export class VisitorController {
       });
       if (!log) { sendNotFound(res, 'Visitor log not found'); return; }
 
-      // Block only if already checked out — every other status is actionable by security
       if (log.status === 'checked_out') {
         res.status(400).json({ success: false, message: 'Visitor already checked out' });
         return;
       }
 
-      // Determine action mode for response message
-      const isOverride   = log.status === 'pending';        // security deciding before resident
-      const isAck        = log.status === 'approved' && status === 'approved'; // confirming entry
-      const isVeto       = log.status === 'approved' && status === 'rejected'; // security vetoing
+      const isOverride = log.status === 'pending';
+      const isAck      = log.status === 'approved' && status === 'approved';
+      const isVeto     = log.status === 'approved' && status === 'rejected';
 
       logger.info(
         `[securityOverride] log_id=${log.id} prev=${log.status} new=${status} ` +
@@ -226,29 +231,16 @@ export class VisitorController {
 
       const visitor = (log as any).visitor as Visitor;
 
-      // triggered_by:'security' tells Flutter NOT to call security-override again (prevents loop)
-      const socketPayload = {
-        log_id: log.id,
-        visitor_id: log.visitor_id,
-        name: visitor?.name,
-        status: log.status,
-        flat_id: log.flat_id,
-        society_id: log.society_id,
+      const fcmData: Record<string, string> = {
+        type: 'visitor_status_update',
+        log_id: s(log.id),
+        visitor_id: s(log.visitor_id),
+        name: s(visitor?.name),
+        status: s(log.status),
+        flat_id: s(log.flat_id),
+        society_id: s(log.society_id),
         triggered_by: 'security',
       };
-
-      socketService.emitToSocietySecurity(log.society_id, 'visitor_status_update', socketPayload);
-
-      // If security vetoes an already-resident-approved entry, notify the resident
-      if (isVeto) {
-        const residents = await User.findAll({
-          where: { flat_id: log.flat_id, is_active: true, is_approved: true, role: 'user' },
-          attributes: ['id'],
-        });
-        for (const r of residents) {
-          socketService.emitToUser(r.id, 'visitor_status_update', socketPayload);
-        }
-      }
 
       const message = isOverride
         ? `Visitor ${status} by security`
@@ -257,6 +249,35 @@ export class VisitorController {
         : isVeto
         ? 'Visitor entry vetoed by security'
         : `Visitor ${status} by security`;
+
+      // Broadcast status update to ALL security guards in the society
+      await notificationService.sendAlertToSocietySecurity(
+        log.society_id,
+        `Visitor ${status === 'approved' ? 'Approved ✅' : 'Rejected ❌'}`,
+        `${visitor?.name}'s entry was ${status} by security.`,
+        fcmData,
+      );
+
+      // If security vetoes a resident-approved entry, also notify the flat residents
+      if (isVeto) {
+        const residents = await User.findAll({
+          where: { flat_id: log.flat_id, is_active: true, is_approved: true, role: 'user' },
+          attributes: ['id'],
+        });
+        await notificationService.sendToMany(
+          residents.map((r) => r.id),
+          {
+            title: 'Visitor Entry Vetoed',
+            body: `${visitor?.name}'s approved entry was rejected by security.`,
+            type: 'visitor_rejected' as any,
+            reference_id: log.id,
+            reference_type: 'visitor',
+          },
+        );
+        await Promise.allSettled(
+          residents.map((r) => notificationService.sendDataToUser(r.id, fcmData))
+        );
+      }
 
       sendSuccess(res, message, log);
     } catch (err) {
@@ -279,15 +300,24 @@ export class VisitorController {
 
       await log.update({ status: 'checked_out', out_time: new Date() });
 
-      socketService.emitToSocietySecurity(log.society_id, 'visitor_status_update', {
-        log_id: log.id,
-        visitor_id: log.visitor_id,
-        name: (log as any).visitor?.name,
-        status: log.status,
-        flat_id: log.flat_id,
-        in_time: log.in_time,
-        out_time: log.out_time,
-      });
+      const visitorName = s((log as any).visitor?.name);
+      await notificationService.sendAlertToSocietySecurity(
+        log.society_id,
+        'Visitor Checked Out',
+        `${visitorName || 'Visitor'} has checked out.`,
+        {
+          type: 'visitor_status_update',
+          log_id: s(log.id),
+          visitor_id: s(log.visitor_id),
+          name: visitorName,
+          status: s(log.status),
+          flat_id: s(log.flat_id),
+          society_id: s(log.society_id),
+          in_time: s(log.in_time),
+          out_time: s(log.out_time),
+          triggered_by: 'security',
+        },
+      );
 
       sendSuccess(res, 'Visitor checked out', log);
     } catch (err) {
@@ -295,7 +325,7 @@ export class VisitorController {
     }
   }
 
-  // GET /lookup/:phone — Auto-fill for repeat visitors (returns profile)
+  // GET /lookup/:phone
   async getByPhone(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { phone } = req.params;
@@ -312,7 +342,7 @@ export class VisitorController {
     }
   }
 
-  // GET / — List all visitor logs (filtered by role, supports search by name/phone)
+  // GET / — List all visitor logs
   async getAll(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const page = parseInt(req.query.page as string) || 1;
@@ -338,7 +368,7 @@ export class VisitorController {
         where.in_time = { [Op.between]: [start, end] };
       } else if (start_date || end_date) {
         const range: any = {};
-        if (start_date) { const s = new Date(start_date as string); s.setHours(0, 0, 0, 0); range[Op.gte] = s; }
+        if (start_date) { const s2 = new Date(start_date as string); s2.setHours(0, 0, 0, 0); range[Op.gte] = s2; }
         if (end_date) { const e = new Date(end_date as string); e.setHours(23, 59, 59, 999); range[Op.lte] = e; }
         where.in_time = range;
       }
@@ -408,7 +438,7 @@ export class VisitorController {
     }
   }
 
-  // GET /pending-requests — Returns pending visitor requests created in the last 30 seconds for the user's flat
+  // GET /pending-requests
   async getRecentPendingRequests(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const seconds = parseInt(req.query.seconds as string) || 30;
@@ -419,7 +449,6 @@ export class VisitorController {
         createdAt: { [Op.gte]: since },
       };
 
-      // Scope to user's flat & society
       if (req.user!.role === 'user') {
         where.flat_id = req.user!.dbUser?.flat_id;
         where.society_id = req.user!.society_id;
@@ -448,6 +477,140 @@ export class VisitorController {
         count: requests.length,
         requests,
         checked_window_seconds: seconds,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // GET /scan/:uuid — Security scans visitor QR code (uuid = visitor-log uuid OR visitor uuid)
+  async scanQR(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { uuid } = req.params;
+      const societyId = queryId(req);
+
+      // ── Step 1: Try to match a specific visitor LOG uuid first ────────────
+      let log = await VisitorLog.findOne({
+        where: { uuid },
+        include: [
+          {
+            model: Visitor, as: 'visitor',
+            attributes: ['id', 'uuid', 'name', 'phone', 'image', 'vehicle_number'],
+          },
+          {
+            model: Flat, as: 'flat',
+            attributes: ['id', 'flat_number', 'floor', 'type'],
+            include: [{ model: Block, as: 'block', attributes: ['id', 'name'] }],
+          },
+          { model: User, as: 'host', attributes: ['id', 'name', 'phone'] },
+          { model: User, as: 'createdByUser', attributes: ['id', 'name', 'phone'] },
+          { model: Staff, as: 'createdByStaff', attributes: ['id', 'name', 'phone'] },
+        ],
+      });
+
+      // ── Step 2: If no log found, treat uuid as a VISITOR profile uuid ────
+      let visitor: any = null;
+      if (!log) {
+        visitor = await Visitor.findOne({ where: { uuid } });
+        if (!visitor) { sendNotFound(res, 'No visitor or visit record found for this QR code'); return; }
+
+        // Get the most recent active (non-checked-out) log for this visitor in the society
+        const logWhere: any = { visitor_id: visitor.id };
+        if (societyId) logWhere.society_id = societyId;
+
+        log = await VisitorLog.findOne({
+          where: { ...logWhere, status: { [Op.in]: ['pending', 'approved'] } },
+          order: [['in_time', 'DESC']],
+          include: [
+            {
+              model: Flat, as: 'flat',
+              attributes: ['id', 'flat_number', 'floor', 'type'],
+              include: [{ model: Block, as: 'block', attributes: ['id', 'name'] }],
+            },
+            { model: User, as: 'host', attributes: ['id', 'name', 'phone'] },
+            { model: User, as: 'createdByUser', attributes: ['id', 'name', 'phone'] },
+            { model: Staff, as: 'createdByStaff', attributes: ['id', 'name', 'phone'] },
+          ],
+        });
+      } else {
+        visitor = (log as any).visitor;
+      }
+
+      // ── Step 3: Total visit count for this visitor ────────────────────────
+      const totalVisits = await VisitorLog.count({
+        where: { visitor_id: visitor.id, status: { [Op.ne]: 'rejected' } },
+      });
+
+      // ── Step 4: Flat residents (who can approve) ──────────────────────────
+      let residents: any[] = [];
+      if (log) {
+        residents = await User.findAll({
+          where: {
+            flat_id: (log as any).flat_id,
+            is_active: true,
+            is_approved: true,
+            role: 'user',
+          },
+          attributes: ['id', 'name', 'phone'],
+        });
+      }
+
+      // ── Step 5: Recent visit history (last 5 visits) ─────────────────────
+      const recentLogs = await VisitorLog.findAll({
+        where: { visitor_id: visitor.id },
+        attributes: ['id', 'visitor_type', 'status', 'in_time', 'out_time', 'purpose', 'is_pre_approved'],
+        order: [['in_time', 'DESC']],
+        limit: 5,
+      });
+
+      // ── Build response ────────────────────────────────────────────────────
+      const logJson = log ? (log as any).toJSON() : null;
+
+      sendSuccess(res, 'Visitor data fetched', {
+        visitor: {
+          id: visitor.id,
+          uuid: visitor.uuid,
+          name: visitor.name,
+          phone: visitor.phone,
+          image: visitor.image ?? null,
+          vehicle_number: visitor.vehicle_number ?? null,
+          total_visits: totalVisits,
+        },
+        current_log: logJson
+          ? {
+              id: logJson.id,
+              uuid: logJson.uuid,
+              status: logJson.status,
+              visitor_type: logJson.visitor_type,
+              purpose: logJson.purpose ?? null,
+              in_time: logJson.in_time,
+              out_time: logJson.out_time ?? null,
+              is_pre_approved: logJson.is_pre_approved,
+              pre_approved_date: logJson.pre_approved_date ?? null,
+            }
+          : null,
+        flat: logJson?.flat
+          ? {
+              id: logJson.flat.id,
+              flat_number: logJson.flat.flat_number,
+              floor: logJson.flat.floor ?? null,
+              type: logJson.flat.type ?? null,
+              block: logJson.flat.block
+                ? { id: logJson.flat.block.id, name: logJson.flat.block.name }
+                : null,
+            }
+          : null,
+        host: logJson?.host
+          ? { id: logJson.host.id, name: logJson.host.name, phone: logJson.host.phone }
+          : null,
+        created_by_resident: logJson?.createdByUser
+          ? { id: logJson.createdByUser.id, name: logJson.createdByUser.name, phone: logJson.createdByUser.phone }
+          : null,
+        created_by_staff: logJson?.createdByStaff
+          ? { id: logJson.createdByStaff.id, name: logJson.createdByStaff.name, phone: logJson.createdByStaff.phone }
+          : null,
+        residents,
+        visit_history: recentLogs,
       });
     } catch (err) {
       next(err);

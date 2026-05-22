@@ -1,7 +1,13 @@
 import { Response, NextFunction } from 'express';
 import { Op } from 'sequelize';
 import { AuthRequest } from '../middlewares/auth.middleware';
-import { Society, Block, Flat } from '../models';
+import {
+  sequelize,
+  Society, Block, Flat, User, Staff,
+  SocietyPolicy, Amenity, Visitor, VisitorLog,
+  DailyHelper, HelperEntryLog, Complaint, Event,
+  ServiceContact, Notification,
+} from '../models';
 import { sendSuccess, sendCreated, sendNotFound, sendError, getPagination, getPaginationMeta } from '../utils/response';
 import { AppError } from '../middlewares/error.middleware';
 import { getRelativePath } from '../utils/upload';
@@ -129,12 +135,71 @@ export class SocietyController {
   }
 
   async delete(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    const id = parseInt(req.params.id);
+    const t = await sequelize.transaction();
     try {
-      const society = await Society.findByPk(req.params.id);
-      if (!society) { sendNotFound(res, 'Society not found'); return; }
-      await society.destroy();
-      sendSuccess(res, 'Society deleted');
+      const society = await Society.findByPk(id, { transaction: t });
+      if (!society) { await t.rollback(); sendNotFound(res, 'Society not found'); return; }
+
+      // ── 1. Collect user IDs — Notification has no society_id ───────────────
+      const societyUsers = await User.findAll({
+        where: { society_id: id },
+        attributes: ['id'],
+        transaction: t,
+      });
+      const userIds = societyUsers.map((u) => u.id);
+
+      // ── 2. Notifications (linked to users only) ─────────────────────────────
+      if (userIds.length > 0) {
+        await Notification.destroy({ where: { user_id: userIds }, force: true, transaction: t });
+      }
+
+      // ── 3. HelperEntryLog (has society_id; child of DailyHelper & Staff) ────
+      await HelperEntryLog.destroy({ where: { society_id: id }, force: true, transaction: t });
+
+      // ── 4. VisitorLog (has society_id; child of Visitor, Flat, User, Staff) ─
+      await VisitorLog.destroy({ where: { society_id: id }, force: true, transaction: t });
+
+      // ── 5. Complaints (has society_id; child of User) ───────────────────────
+      await Complaint.destroy({ where: { society_id: id }, force: true, transaction: t });
+
+      // ── 6. Events (has society_id; child of User) ───────────────────────────
+      await Event.destroy({ where: { society_id: id }, force: true, transaction: t });
+
+      // ── 7. Visitors (has society_id; parent of VisitorLog — already deleted) ─
+      await Visitor.destroy({ where: { society_id: id }, force: true, transaction: t });
+
+      // ── 8. DailyHelpers (has society_id; parent of HelperEntryLog — done) ───
+      await DailyHelper.destroy({ where: { society_id: id }, force: true, transaction: t });
+
+      // ── 9. Service Contacts ──────────────────────────────────────────────────
+      await ServiceContact.destroy({ where: { society_id: id }, force: true, transaction: t });
+
+      // ── 10. Policies ─────────────────────────────────────────────────────────
+      await SocietyPolicy.destroy({ where: { society_id: id }, force: true, transaction: t });
+
+      // ── 11. Amenities ────────────────────────────────────────────────────────
+      await Amenity.destroy({ where: { society_id: id }, force: true, transaction: t });
+
+      // ── 12. Staff (has society_id; FK refs already cleared above) ────────────
+      await Staff.destroy({ where: { society_id: id }, force: true, transaction: t });
+
+      // ── 13. Users (has society_id; FK refs already cleared above) ────────────
+      await User.destroy({ where: { society_id: id }, force: true, transaction: t });
+
+      // ── 14. Flats (has society_id; FK refs cleared — users & visitor logs gone) ─
+      await Flat.destroy({ where: { society_id: id }, force: true, transaction: t });
+
+      // ── 15. Blocks ───────────────────────────────────────────────────────────
+      await Block.destroy({ where: { society_id: id }, force: true, transaction: t });
+
+      // ── 16. Society itself ───────────────────────────────────────────────────
+      await society.destroy({ force: true, transaction: t });
+
+      await t.commit();
+      sendSuccess(res, 'Society and all related data deleted successfully');
     } catch (err) {
+      await t.rollback();
       next(err);
     }
   }

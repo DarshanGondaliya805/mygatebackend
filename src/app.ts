@@ -10,6 +10,7 @@ import config from './config/app';
 import router from './routes';
 import { errorHandler, notFound } from './middlewares/error.middleware';
 import logger from './utils/logger';
+import { istTimestamp } from './utils/timezone';
 
 const app = express();
 
@@ -76,7 +77,7 @@ app.get('/health', (req, res) => {
     success: true,
     message: 'MyGate API is running pratik',
     env: config.env,
-    timestamp: new Date().toISOString(),
+    timestamp: istTimestamp(),
   });
 });
 

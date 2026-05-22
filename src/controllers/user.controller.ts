@@ -18,17 +18,12 @@ export class UserController {
 
       const image = req.file ? getRelativePath(req.file.path) : null;
 
-      if (!password) {
-        sendError(res, 'Password is required', 400);
-        return;
-      }
-
       // Admin can only create users within their own society
       const targetSocietyId =
         req.user!.role === 'super_admin' ? society_id : req.user!.society_id;
 
       const salt = await bcrypt.genSalt(12);
-      const hashedPassword = await bcrypt.hash(password, salt);
+      const hashedPassword = await bcrypt.hash(password, salt);  // password validated in route
 
       // Super admin / admin created users are auto-approved
       const user = await User.create({
@@ -226,11 +221,21 @@ export class UserController {
       const user = await User.findByPk(req.params.id);
       if (!user) { sendNotFound(res, 'User not found'); return; }
 
-      const { name, email, gender, dob, user_type, flat_id, is_active, fcm_token } = req.body;
+      const { name, email, phone, password, gender, dob, user_type, flat_id, society_id, is_active, fcm_token } = req.body;
       const image = req.file ? getRelativePath(req.file.path) : undefined;
 
+      // Hash the new password (password is required — validated in route)
+      const salt = await bcrypt.genSalt(12);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      // Super admin can move a user to a different society; others keep current
+      const targetSocietyId =
+        req.user!.role === 'super_admin' && society_id ? society_id : user.society_id;
+
       await user.update({
-        name, email, gender, dob, user_type,
+        name, email, phone, gender, dob, user_type,
+        password: hashedPassword,
+        society_id: targetSocietyId,
         flat_id: flat_id !== undefined ? flat_id : user.flat_id,
         ...(is_active !== undefined ? { is_active } : {}),
         ...(fcm_token ? { fcm_token } : {}),

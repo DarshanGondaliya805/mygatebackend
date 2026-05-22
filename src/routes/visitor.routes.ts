@@ -25,6 +25,9 @@ router.post(
 // User: pre-approve upcoming visitor
 router.post('/pre-approve', authorize('user', 'admin'), visitorController.preApprove.bind(visitorController));
 
+// Security: scan visitor QR code — returns full visitor data, current log, flat, host, residents
+router.get('/scan/:uuid', authorize('security', 'admin', 'super_admin'), visitorController.scanQR.bind(visitorController));
+
 // Look up repeat visitor profile by phone (for auto-fill)
 router.get('/lookup/:phone', authorize('security', 'admin', 'super_admin'), visitorController.getByPhone.bind(visitorController));
 

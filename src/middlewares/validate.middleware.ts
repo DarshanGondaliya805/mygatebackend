@@ -7,10 +7,11 @@ export const validate = (validations: ValidationChain[]) => {
 
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      const first = errors.array()[0];
       res.status(400).json({
         success: false,
-        message: 'Validation failed',
-        errors: errors.array().map((e) => ({ field: (e as any).path, message: e.msg })),
+        message: (first as any).msg,
+        field: (first as any).path,
       });
       return;
     }

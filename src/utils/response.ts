@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { convertDatesToIST } from './timezone';
 
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -13,6 +14,9 @@ export interface ApiResponse<T = any> {
   };
 }
 
+const sendJson = (res: Response, statusCode: number, body: object): Response =>
+  res.status(statusCode).type('json').end(JSON.stringify(convertDatesToIST(body)));
+
 export const sendSuccess = <T>(
   res: Response,
   message: string,
@@ -22,7 +26,7 @@ export const sendSuccess = <T>(
 ): Response => {
   const response: ApiResponse<T> = { success: true, message, data };
   if (pagination) response.pagination = pagination;
-  return res.status(statusCode).json(response);
+  return sendJson(res, statusCode, response);
 };
 
 export const sendError = (
@@ -31,7 +35,7 @@ export const sendError = (
   statusCode = 400,
   error?: any
 ): Response => {
-  return res.status(statusCode).json({
+  return sendJson(res, statusCode, {
     success: false,
     message,
     ...(process.env.NODE_ENV !== 'production' && error ? { error } : {}),

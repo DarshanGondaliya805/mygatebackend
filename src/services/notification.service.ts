@@ -1,4 +1,4 @@
-import { Notification, User } from '../models';
+import { Notification, User, Staff } from '../models';
 import { NotificationType } from '../models/Notification';
 import logger from '../utils/logger';
 import admin from '../config/firebase';
@@ -13,8 +13,8 @@ interface SendNotificationPayload {
 }
 
 export class NotificationService {
+  // ── Display notification + DB record (residents / users) ──────────────────
   async send(payload: SendNotificationPayload): Promise<void> {
-    // Save to DB
     await Notification.create({
       user_id: payload.user_id,
       title: payload.title,
@@ -24,13 +24,10 @@ export class NotificationService {
       reference_type: payload.reference_type ?? null,
     });
 
-    // Send push via FCM if user has a token
     try {
-      const user = await User.findByPk(payload.user_id, {
-        attributes: ['fcm_token'],
-      });
+      const user = await User.findByPk(payload.user_id, { attributes: ['fcm_token'] });
       if (user?.fcm_token) {
-        await this.sendFCM(user.fcm_token, payload.title, payload.body);
+        await this.sendFCMNotification(user.fcm_token, payload.title, payload.body);
       }
     } catch (err) {
       logger.warn(`FCM push failed for user ${payload.user_id}:`, err);
@@ -41,16 +38,117 @@ export class NotificationService {
     await Promise.allSettled(userIds.map((id) => this.send({ ...payload, user_id: id })));
   }
 
-  private async sendFCM(token: string, title: string, body: string): Promise<void> {
+  // ── Low-level FCM senders ─────────────────────────────────────────────────
+
+  /** Display-only notification (title + body visible in tray). */
+  private async sendFCMNotification(token: string, title: string, body: string): Promise<void> {
     await admin.messaging().send({
       token,
       notification: { title, body },
       android: { priority: 'high' },
       apns: { payload: { aps: { sound: 'default' } } },
     });
-    logger.info(`[FCM] Sent to token ${token.substring(0, 10)}...: ${title}`);
+    logger.info(`[FCM] Notification → token ${token.substring(0, 10)}...: ${title}`);
   }
 
+  /**
+   * Data-only message — silent, no tray entry.
+   * Works reliably only when the app is in the foreground.
+   * Use sendFCMCombined when the app may be killed.
+   */
+  private async sendFCMData(tokens: string[], data: Record<string, string>): Promise<void> {
+    if (tokens.length === 0) return;
+    const base = {
+      data,
+      android: { priority: 'high' as const },
+      apns: { payload: { aps: { contentAvailable: true } } },
+    };
+    if (tokens.length === 1) {
+      await admin.messaging().send({ token: tokens[0], ...base });
+    } else {
+      await admin.messaging().sendEachForMulticast({ tokens, ...base });
+    }
+    logger.info(`[FCM] Data msg type=${data.type} → ${tokens.length} token(s)`);
+  }
+
+  /**
+   * Combined notification + data in one FCM message.
+   * The OS delivers the tray notification even on a killed app,
+   * and the data payload is available when the app opens.
+   * Use this for security staff so they are always reached.
+   */
+  private async sendFCMCombined(
+    tokens: string[],
+    title: string,
+    body: string,
+    data: Record<string, string>,
+  ): Promise<void> {
+    if (tokens.length === 0) return;
+    const base = {
+      notification: { title, body },
+      data,
+      android: { priority: 'high' as const, notification: { sound: 'default' } },
+      apns: { payload: { aps: { sound: 'default', contentAvailable: true } } },
+    };
+    if (tokens.length === 1) {
+      await admin.messaging().send({ token: tokens[0], ...base });
+    } else {
+      await admin.messaging().sendEachForMulticast({ tokens, ...base });
+    }
+    logger.info(`[FCM] Combined msg type=${data.type} → ${tokens.length} token(s): ${title}`);
+  }
+
+  // ── Public data-message helpers (residents) ───────────────────────────────
+
+  /** Silent data message to a single resident — use when app is expected open. */
+  async sendDataToUser(userId: number, data: Record<string, string>): Promise<void> {
+    try {
+      const user = await User.findByPk(userId, { attributes: ['fcm_token'] });
+      if (user?.fcm_token) await this.sendFCMData([user.fcm_token], data);
+    } catch (err) {
+      logger.warn(`[FCM] sendDataToUser failed for user ${userId}:`, err);
+    }
+  }
+
+  // ── Public combined-message helpers (security staff) ─────────────────────
+  // Security staff may have their app killed, so we always send notification+data
+  // together so the OS guarantees tray delivery regardless of app state.
+
+  /** Combined notification+data to a single security staff member. */
+  async sendAlertToStaff(
+    staffId: number,
+    title: string,
+    body: string,
+    data: Record<string, string>,
+  ): Promise<void> {
+    try {
+      const staff = await Staff.unscoped().findByPk(staffId, { attributes: ['fcm_token'] });
+      if (staff?.fcm_token) await this.sendFCMCombined([staff.fcm_token], title, body, data);
+    } catch (err) {
+      logger.warn(`[FCM] sendAlertToStaff failed for staff ${staffId}:`, err);
+    }
+  }
+
+  /** Combined notification+data to ALL active security staff in a society. */
+  async sendAlertToSocietySecurity(
+    societyId: number,
+    title: string,
+    body: string,
+    data: Record<string, string>,
+  ): Promise<void> {
+    try {
+      const staffList = await Staff.findAll({
+        where: { society_id: societyId, is_active: true },
+        attributes: ['fcm_token'],
+      });
+      const tokens = staffList.map((s) => s.fcm_token).filter((t): t is string => !!t);
+      if (tokens.length > 0) await this.sendFCMCombined(tokens, title, body, data);
+    } catch (err) {
+      logger.warn(`[FCM] sendAlertToSocietySecurity failed for society ${societyId}:`, err);
+    }
+  }
+
+  // ── Notification inbox ────────────────────────────────────────────────────
   async getAll(userId: number, page = 1, limit = 20, unreadOnly = false) {
     const where: any = { user_id: userId };
     if (unreadOnly) where.is_read = false;

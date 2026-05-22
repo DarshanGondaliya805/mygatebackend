@@ -28,14 +28,15 @@ export class AuthService {
       const accessToken = generateAccessToken(payload);
       const refreshToken = generateRefreshToken(payload);
 
+      const loginAt = new Date();
       await user.update({
         refresh_token: refreshToken,
-        last_login: new Date(),
+        last_login: loginAt,
         ...(fcmToken ? { fcm_token: fcmToken } : {}),
       });
 
-      const { id, uuid, name, email, phone, role,society_id  } = (user as any).dataValues;
-      return { accessToken, refreshToken, user: { id, uuid, name: name ?? '', email: email ?? '', phone: phone ?? '', role, source: 'user',society_id : society_id } };
+      const { id, uuid, name, email, phone, role, society_id } = (user as any).dataValues;
+      return { accessToken, refreshToken, user: { id, uuid, name: name ?? '', email: email ?? '', phone: phone ?? '', role, source: 'user', society_id, last_login: loginAt } };
     }
 
     // ── 2. Fall back to staff table ───────────────────────────────────────────
@@ -57,6 +58,8 @@ export class AuthService {
     const staffPayload = { id: staff.id, uuid: staff.uuid, role: 'security' as const, society_id: staff.society_id, source: 'staff' as const };
     const accessToken = generateAccessToken(staffPayload);
     const refreshToken = generateRefreshToken(staffPayload);
+
+    if (fcmToken) await staff.update({ fcm_token: fcmToken });
 
     const { id, uuid, name, email, phone, staff_type,society_id } = (staff as any).dataValues;
     return { accessToken, refreshToken, user: { id, uuid, name: name ?? '', email: email ?? '', phone: phone ?? '', role: 'security', staff_type, source: 'staff', society_id: society_id } };
@@ -93,7 +96,10 @@ export class AuthService {
   }
 
   async logout(userId: number, source?: string) {
-    if (source === 'staff') return; // staff table has no refresh_token column
+    if (source === 'staff') {
+      await Staff.update({ fcm_token: null }, { where: { id: userId } });
+      return;
+    }
     await User.update({ refresh_token: null, fcm_token: null }, { where: { id: userId } });
   }
 

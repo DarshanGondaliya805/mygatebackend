@@ -23,7 +23,7 @@ export class StaffController {
         name, phone, email, dob, gender, staff_type,
         salary: salary || null, salary_type,
         address, documents, image,
-        password: password || null,
+        password,                          // required — validated in route
         joining_date: joining_date || null,
         society_id: bodyId(req),
         created_by: req.user!.id,
@@ -60,18 +60,33 @@ export class StaffController {
     try {
       const staff = await Staff.findByPk(req.params.id);
       if (!staff) { sendNotFound(res, 'Staff not found'); return; }
+
       const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
-      const image = files?.image?.[0] ? getRelativePath(files.image[0].path) : undefined;
-      const documents = files?.documents
-        ? files.documents.map((f) => getRelativePath(f.path))
-        : undefined;
-      const { password, ...rest } = req.body;
+      // image & documents are optional — only overwrite if new files were uploaded
+      const image     = files?.image?.[0]  ? getRelativePath(files.image[0].path) : undefined;
+      const documents = files?.documents   ? files.documents.map((f) => getRelativePath(f.path)) : undefined;
+
+      // Explicitly pick allowed editable fields (never touch society_id / created_by / uuid)
+      const {
+        name, phone, email, password,
+        dob, gender, staff_type,
+        salary, salary_type, address, joining_date,
+      } = req.body;
+
       await staff.update({
-        ...rest,
-        ...(image ? { image } : {}),
-        ...(documents ? { documents } : {}),
-        ...(password ? { password } : {}),
+        name, phone, email,
+        password,                              // plain text — hashed by beforeSave hook
+        dob:          dob          || null,
+        gender:       gender       || null,
+        staff_type,
+        salary:       salary       || null,
+        salary_type:  salary_type  || undefined,
+        address:      address      || null,
+        joining_date: joining_date || null,
+        ...(image     ? { image }     : {}),   // keep existing image if none uploaded
+        ...(documents ? { documents } : {}),   // keep existing documents if none uploaded
       });
+
       sendSuccess(res, 'Staff updated', staff);
     } catch (err) { next(err); }
   }
@@ -91,7 +106,13 @@ export class StaffController {
       if (!staff) { sendNotFound(res, 'Staff not found'); return; }
 
       const { name, email } = req.body;
-      await staff.update({ ...(name ? { name } : {}), ...(email ? { email } : {}) });
+      const image = req.file ? getRelativePath(req.file.path) : undefined;
+
+      await staff.update({
+        ...(name  ? { name }  : {}),
+        ...(email ? { email } : {}),
+        ...(image ? { image } : {}),   // only overwrite if a new file was uploaded
+      });
       sendSuccess(res, 'Profile updated', staff);
     } catch (err) { next(err); }
   }

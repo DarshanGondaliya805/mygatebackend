@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import authService from '../services/auth.service';
-import { sendSuccess, sendCreated, sendError } from '../utils/response';
+import { User, Staff, Flat, Block, Society } from '../models';
+import { sendSuccess, sendError, sendNotFound } from '../utils/response';
 
 export class AuthController {
   async login(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -45,7 +46,45 @@ export class AuthController {
 
   async me(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      sendSuccess(res, 'Profile fetched', req.user?.dbUser);
+      // ── Security staff — return plain staff profile (no flat/block) ───────
+      if (req.user!.source === 'staff') {
+        const staff = await Staff.findByPk(req.user!.id, {
+          attributes: { exclude: ['password', 'fcm_token'] },
+          include: [
+            { model: Society, as: 'society', attributes: ['id', 'name', 'location', 'city', 'state', 'logo'] },
+          ],
+        });
+        if (!staff) { sendNotFound(res, 'Staff not found'); return; }
+        sendSuccess(res, 'Profile fetched', staff);
+        return;
+      }
+
+      // ── Resident / Admin — include flat → block → society ─────────────────
+      const user = await User.findByPk(req.user!.id, {
+        attributes: { exclude: ['password', 'refresh_token', 'fcm_token'] },
+        include: [
+          {
+            model: Flat,
+            as: 'flat',
+            attributes: ['id', 'flat_number', 'floor', 'type', 'is_occupied'],
+            include: [
+              {
+                model: Block,
+                as: 'block',
+                attributes: ['id', 'name', 'total_floors'],
+              },
+            ],
+          },
+          {
+            model: Society,
+            as: 'society',
+            attributes: ['id', 'name', 'location', 'city', 'state', 'pincode', 'logo', 'total_blocks'],
+          },
+        ],
+      });
+
+      if (!user) { sendNotFound(res, 'User not found'); return; }
+      sendSuccess(res, 'Profile fetched', user);
     } catch (err) {
       next(err);
     }
