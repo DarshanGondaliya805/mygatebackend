@@ -331,12 +331,44 @@ export class VisitorController {
       const { phone } = req.params;
       const sid = queryId(req);
 
+      // Full visitor profile
       const visitor = await Visitor.findOne({
         where: sid ? { phone, society_id: sid } : { phone },
-        attributes: ['id', 'name', 'phone', 'image', 'vehicle_number'],
       });
 
-      sendSuccess(res, visitor ? 'Visitor found' : 'New visitor', visitor);
+      // New visitor — no profile yet
+      if (!visitor) {
+        sendSuccess(res, 'New visitor', null);
+        return;
+      }
+
+      // Last entry log with full associations
+      const lastLog = await VisitorLog.findOne({
+        where: {
+          visitor_id: visitor.id,
+          ...(sid ? { society_id: sid } : {}),
+        },
+        include: [
+          {
+            model: Flat, as: 'flat',
+            attributes: ['id', 'flat_number', 'floor', 'type'],
+            include: [{ model: Block, as: 'block', attributes: ['id', 'name'] }],
+          },
+          { model: User,  as: 'host',           attributes: ['id', 'name', 'phone'] },
+          { model: User,  as: 'createdByUser',   attributes: ['id', 'name', 'phone'] },
+          { model: Staff, as: 'createdByStaff',  attributes: ['id', 'name', 'phone'] },
+        ],
+        order: [['in_time', 'DESC']],
+      });
+
+      // Total visit count (all time)
+      const totalVisits = await VisitorLog.count({ where: { visitor_id: visitor.id } });
+
+      sendSuccess(res, 'Visitor found', {
+        visitor,
+        total_visits: totalVisits,
+        last_log: lastLog,
+      });
     } catch (err) {
       next(err);
     }

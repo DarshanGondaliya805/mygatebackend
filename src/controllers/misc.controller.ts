@@ -75,7 +75,6 @@ export class StaffController {
 
       await staff.update({
         name, phone, email,
-        password,                              // plain text — hashed by beforeSave hook
         dob:          dob          || null,
         gender:       gender       || null,
         staff_type,
@@ -83,6 +82,7 @@ export class StaffController {
         salary_type:  salary_type  || undefined,
         address:      address      || null,
         joining_date: joining_date || null,
+        ...(password  ? { password }  : {}),   // only update if provided — beforeSave hook hashes it
         ...(image     ? { image }     : {}),   // keep existing image if none uploaded
         ...(documents ? { documents } : {}),   // keep existing documents if none uploaded
       });
@@ -114,13 +114,14 @@ export class StaffController {
       const staff = await Staff.findByPk(req.user!.id);
       if (!staff) { sendNotFound(res, 'Staff not found'); return; }
 
-      const { name, email } = req.body;
+      const { name, email, password } = req.body;
       const image = req.file ? getRelativePath(req.file.path) : undefined;
 
       await staff.update({
-        ...(name  ? { name }  : {}),
-        ...(email ? { email } : {}),
-        ...(image ? { image } : {}),   // only overwrite if a new file was uploaded
+        ...(name     ? { name }     : {}),
+        ...(email    ? { email }    : {}),
+        ...(password ? { password } : {}),   // optional — beforeSave hook hashes it if provided
+        ...(image    ? { image }    : {}),   // only overwrite if a new file was uploaded
       });
       sendSuccess(res, 'Profile updated', staff);
     } catch (err) { next(err); }

@@ -2,7 +2,7 @@ import { Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import { Op } from 'sequelize';
 import { AuthRequest } from '../middlewares/auth.middleware';
-import { User, Flat, Society } from '../models';
+import { User, Flat, Block, Society } from '../models';
 import { sendSuccess, sendCreated, sendNotFound, sendError, getPagination, getPaginationMeta } from '../utils/response';
 import { getRelativePath } from '../utils/upload';
 import notificationService from '../services/notification.service';
@@ -224,9 +224,12 @@ export class UserController {
       const { name, email, phone, password, gender, dob, user_type, flat_id, society_id, is_active, fcm_token } = req.body;
       const image = req.file ? getRelativePath(req.file.path) : undefined;
 
-      // Hash the new password (password is required — validated in route)
-      const salt = await bcrypt.genSalt(12);
-      const hashedPassword = await bcrypt.hash(password, salt);
+      // Hash password only when one was actually provided
+      let hashedPassword: string | undefined;
+      if (password) {
+        const salt = await bcrypt.genSalt(12);
+        hashedPassword = await bcrypt.hash(password, salt);
+      }
 
       // Super admin can move a user to a different society; others keep current
       const targetSocietyId =
@@ -234,12 +237,12 @@ export class UserController {
 
       await user.update({
         name, email, phone, gender, dob, user_type,
-        password: hashedPassword,
         society_id: targetSocietyId,
         flat_id: flat_id !== undefined ? flat_id : user.flat_id,
+        ...(hashedPassword      ? { password: hashedPassword } : {}),  // skip if not provided
         ...(is_active !== undefined ? { is_active } : {}),
-        ...(fcm_token ? { fcm_token } : {}),
-        ...(image ? { image } : {}),
+        ...(fcm_token           ? { fcm_token } : {}),
+        ...(image               ? { image }     : {}),
       });
 
       sendSuccess(res, 'User updated', user);
@@ -296,8 +299,14 @@ export class UserController {
           is_approved: true,
           is_active: true,
         },
-        include: [{ model: Flat, as: 'flat', attributes: ['id', 'flat_number', 'floor'] }],
-        attributes: ['id', 'name', 'phone', 'image', 'flat_id'],
+        attributes: ['id', 'name', 'email', 'phone', 'image', 'flat_id'],
+        include: [
+          {
+            model: Flat, as: 'flat',
+            attributes: ['id', 'flat_number', 'floor', 'type'],
+            include: [{ model: Block, as: 'block', attributes: ['id', 'name'] }],
+          },
+        ],
         order: [['name', 'ASC']],
       });
       sendSuccess(res, 'Building directory fetched', users);

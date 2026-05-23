@@ -23,6 +23,20 @@ const staffValidation = [
     .withMessage('Invalid staff type'),
 ];
 
+const staffUpdateValidation = [
+  body('name').notEmpty().withMessage('Name is required'),
+  body('phone').notEmpty().withMessage('Phone is required'),
+  body('email').notEmpty().withMessage('Email is required').isEmail().withMessage('Invalid email format'),
+  // password is optional on update — only validated when provided
+  body('password')
+    .optional({ checkFalsy: true })
+    .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  body('staff_type')
+    .notEmpty().withMessage('Staff type is required')
+    .isIn(['security', 'cleaning', 'gardening', 'maintenance', 'electrician', 'plumber', 'lift_operator', 'other'])
+    .withMessage('Invalid staff type'),
+];
+
 // ─── Staff Routes ─────────────────────────────────────────────────────────────
 export const staffRouter = Router();
 staffRouter.use(authenticate);
@@ -40,7 +54,7 @@ staffRouter.put(
   '/:id',
   authorize('super_admin', 'admin'),
   uploadFields([{ name: 'image', maxCount: 1 }, { name: 'documents', maxCount: 5 }]),
-  validate(staffValidation),
+  validate(staffUpdateValidation),
   staffController.update.bind(staffController)
 );
 staffRouter.delete('/:id', authorize('super_admin', 'admin'), staffController.delete.bind(staffController));

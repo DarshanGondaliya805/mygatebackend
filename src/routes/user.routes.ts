@@ -41,8 +41,9 @@ const updateValidation = [
     .notEmpty().withMessage('Email is required')
     .isEmail().withMessage('Invalid email format'),
   body('phone').notEmpty().withMessage('Phone is required'),
+  // password is optional on update — only validated when provided
   body('password')
-    .notEmpty().withMessage('Password is required')
+    .optional({ checkFalsy: true })
     .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   // society_id required only for super_admin callers
   body('society_id').custom((value, { req }) => {
