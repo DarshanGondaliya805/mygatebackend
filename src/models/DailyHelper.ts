@@ -1,7 +1,7 @@
 import { Model, DataTypes, Sequelize, Optional } from 'sequelize';
 
 // ─── DailyHelper ─────────────────────────────────────────────────────────────
-export type HelperType = 'milkman' | 'laundry' | 'newspaper' | 'cook' | 'maid' | 'driver' | 'other';
+export type HelperType = string; // free-text — any helper type is allowed
 
 export interface DailyHelperAttributes {
   id: number;
@@ -57,7 +57,7 @@ export class DailyHelper
         phone: { type: DataTypes.STRING(15), allowNull: false },
         image: { type: DataTypes.STRING(255), allowNull: true },
         helper_type: {
-          type: DataTypes.ENUM('milkman', 'laundry', 'newspaper', 'cook', 'maid', 'driver', 'other'),
+          type: DataTypes.STRING(100),
           allowNull: false,
         },
         user_id: { type: DataTypes.INTEGER, allowNull: false },
