@@ -17,7 +17,7 @@ import {
 } from './misc.routes';
 
 const router = Router();
-
+  
 router.use('/auth', authRoutes);
 router.use('/public', publicRoutes);
 router.use('/societies', societyRoutes);
