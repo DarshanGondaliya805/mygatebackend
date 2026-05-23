@@ -93,8 +93,17 @@ export class StaffController {
 
   async delete(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const staff = await Staff.findByPk(req.params.id);
+      const staff = await Staff.unscoped().findByPk(req.params.id);
       if (!staff) { sendNotFound(res, 'Staff not found'); return; }
+
+      // Free up unique-constrained fields before soft-delete so the same
+      // email / phone can be re-registered immediately after deletion.
+      const ts = Date.now();
+      await staff.update({
+        phone: `deleted_${staff.id}_${ts}`,
+        email: staff.email ? `deleted_${staff.id}_${ts}@deleted.invalid` : null,
+      });
+
       await staff.destroy();
       sendSuccess(res, 'Staff deleted');
     } catch (err) { next(err); }

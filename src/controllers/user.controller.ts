@@ -267,8 +267,17 @@ export class UserController {
 
   async delete(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const user = await User.findByPk(req.params.id);
+      const user = await User.unscoped().findByPk(req.params.id);
       if (!user) { sendNotFound(res, 'User not found'); return; }
+
+      // Free up unique-constrained fields before soft-delete so the same
+      // email / phone can be re-registered immediately after deletion.
+      const ts = Date.now();
+      await user.update({
+        phone: `deleted_${user.id}_${ts}`,
+        email: user.email ? `deleted_${user.id}_${ts}@deleted.invalid` : null,
+      });
+
       await user.destroy();
       sendSuccess(res, 'User deleted');
     } catch (err) {
