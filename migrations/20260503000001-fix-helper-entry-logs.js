@@ -36,9 +36,11 @@ module.exports = {
   },
 
   async down(queryInterface, Sequelize) {
-    await queryInterface.removeIndex('helper_entry_logs', ['created_by_staff']);
-    await queryInterface.removeColumn('helper_entry_logs', 'deletedAt');
+    // NOTE: removeColumn on a FK-constrained column automatically drops both
+    // the FK constraint AND its backing index — never call removeIndex first,
+    // as MySQL will refuse to drop an index still referenced by a FK.
     await queryInterface.removeColumn('helper_entry_logs', 'created_by_staff');
+    await queryInterface.removeColumn('helper_entry_logs', 'deletedAt');
     await queryInterface.removeColumn('helper_entry_logs', 'created_by');
     // Restore original created_by with users FK
     await queryInterface.addColumn('helper_entry_logs', 'created_by', {
