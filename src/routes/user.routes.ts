@@ -45,13 +45,7 @@ const updateValidation = [
   body('password')
     .optional({ checkFalsy: true })
     .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-  // society_id required only for super_admin callers
-  body('society_id').custom((value, { req }) => {
-    if ((req as any).user?.role === 'super_admin' && !value) {
-      throw new Error('Society is required');
-    }
-    return true;
-  }),
+  // society_id is optional on update — if omitted the user stays in their current society
   // flat_id required when the role being set is 'user'
   body('flat_id').custom((value, { req }) => {
     const role = (req as any).body?.role;
