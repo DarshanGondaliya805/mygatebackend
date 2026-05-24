@@ -165,7 +165,6 @@ export class VisitorController {
 
       const statusTitle = `Visitor ${status === 'approved' ? 'Approved ✅' : 'Rejected ❌'}`;
       const statusBody  = `${visitor?.name}'s entry has been ${status} by the resident.`;
-      const statusType  = status === 'approved' ? 'visitor_approved' : 'visitor_rejected';
 
       // FCM data payload for real-time update on security app
       const fcmData: Record<string, string> = {
@@ -180,23 +179,7 @@ export class VisitorController {
         triggered_by: 'resident',
       };
 
-      // Notify the resident/user who created the entry (if created by a resident)
-      if (log.created_by) {
-        logger.info(`[updateStatus] notifying resident created_by=${log.created_by}`);
-        await notificationService.send({
-          user_id: log.created_by,
-          title: statusTitle,
-          body: statusBody,
-          type: statusType as any,
-          reference_id: log.id,
-          reference_type: 'visitor',
-        });
-        await notificationService.sendDataToUser(log.created_by, fcmData);
-      }
-
-      // Broadcast status update to ALL security guards in the society (one notification each).
-      // This already covers the specific guard who created the entry — no separate
-      // sendAlertToStaff call needed (that was causing the creating guard to receive 2 notifications).
+      // Send exactly ONE notification — broadcast to all security guards in the society.
       await notificationService.sendAlertToSocietySecurity(log.society_id, statusTitle, statusBody, fcmData);
 
       sendSuccess(res, `Visitor ${status} successfully`, log);
