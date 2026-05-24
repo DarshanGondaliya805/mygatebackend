@@ -21,6 +21,13 @@ const staffValidation = [
     .notEmpty().withMessage('Staff type is required')
     .isIn(['security', 'cleaning', 'gardening', 'maintenance', 'electrician', 'plumber', 'lift_operator', 'other'])
     .withMessage('Invalid staff type'),
+  // society_id required for super_admin (admins use their own society automatically)
+  body('society_id').custom((value, { req }) => {
+    if ((req as any).user?.role === 'super_admin' && !value) {
+      throw new Error('Society is required');
+    }
+    return true;
+  }),
 ];
 
 const staffUpdateValidation = [
@@ -36,6 +43,7 @@ const staffUpdateValidation = [
     .optional({ checkFalsy: true })
     .isIn(['security', 'cleaning', 'gardening', 'maintenance', 'electrician', 'plumber', 'lift_operator', 'other'])
     .withMessage('Invalid staff type'),
+  // society_id is optional on update — if omitted the staff stays in their current society
 ];
 
 // ─── Staff Routes ─────────────────────────────────────────────────────────────
