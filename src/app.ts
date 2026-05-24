@@ -67,7 +67,6 @@ if (config.env !== 'production') {
     })
   );
 }
-
 // ─── Static file serving (uploads) ───────────────────────────────────────────
 app.use('/uploads', express.static(path.resolve(config.upload.path)));
 

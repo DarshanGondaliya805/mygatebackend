@@ -98,12 +98,23 @@ export class StaffController {
 
       // Free up unique-constrained fields before soft-delete so the same
       // email / phone can be re-registered immediately after deletion.
+      // • phone is VARCHAR(15) → keep tombstone short: "d{id}" (max 11 chars, always unique)
+      // • Use class-level Staff.update() with hooks:false to bypass ALL model validators/hooks
       const ts = Date.now();
-      await staff.update({
-        phone: `deleted_${staff.id}_${ts}`,
-        email: staff.email ? `deleted_${staff.id}_${ts}@deleted.invalid` : null,
-      });
+      await Staff.update(
+        {
+          phone: `d${staff.id}`,
+          email: staff.email ? `d${staff.id}x${ts}@d.co` : null,
+        },
+        {
+          where: { id: staff.id },
+          validate: false,
+          hooks: false,
+          silent: true,
+        } as any,
+      );
 
+      await staff.reload();   // sync instance state before destroy
       await staff.destroy();
       sendSuccess(res, 'Staff deleted');
     } catch (err) { next(err); }
@@ -309,7 +320,16 @@ export class EventController {
       const event = await Event.findByPk(req.params.id);
       if (!event) { sendNotFound(res, 'Event not found'); return; }
       const image = req.file ? getRelativePath(req.file.path) : undefined;
-      await event.update({ ...req.body, ...(image ? { image } : {}) });
+      const { title, description, venue, start_time, end_time, category } = req.body;
+      await event.update({
+        ...(title                !== undefined ? { title }                          : {}),
+        ...(description         !== undefined ? { description }                    : {}),
+        ...(venue               !== undefined ? { venue }                          : {}),
+        ...(start_time          !== undefined ? { start_time: new Date(start_time) } : {}),
+        ...(end_time            !== undefined ? { end_time: end_time ? new Date(end_time) : null } : {}),
+        ...(category            !== undefined ? { category }                       : {}),
+        ...(image                             ? { image }                          : {}),
+      });
       sendSuccess(res, 'Event updated', event);
     } catch (err) { next(err); }
   }
@@ -354,7 +374,15 @@ export class ServiceContactController {
     try {
       const contact = await ServiceContact.findByPk(req.params.id);
       if (!contact) { sendNotFound(res, 'Contact not found'); return; }
-      await contact.update(req.body);
+      const { name, phone, alternate_phone, service_type, description, is_active } = req.body;
+      await contact.update({
+        ...(name             !== undefined ? { name }                                  : {}),
+        ...(phone            !== undefined ? { phone }                                 : {}),
+        ...(alternate_phone  !== undefined ? { alternate_phone: alternate_phone || null } : {}),
+        ...(service_type     !== undefined ? { service_type }                          : {}),
+        ...(description      !== undefined ? { description: description || null }      : {}),
+        ...(is_active        !== undefined ? { is_active }                             : {}),
+      });
       sendSuccess(res, 'Contact updated', contact);
     } catch (err) { next(err); }
   }
@@ -400,7 +428,13 @@ export class PolicyController {
     try {
       const policy = await SocietyPolicy.findByPk(req.params.id);
       if (!policy) { sendNotFound(res, 'Policy not found'); return; }
-      await policy.update({ ...req.body, updated_by: req.user!.id });
+      const { title, description, category } = req.body;
+      await policy.update({
+        ...(title       !== undefined ? { title }                       : {}),
+        ...(description !== undefined ? { description }                 : {}),
+        ...(category    !== undefined ? { category }                    : {}),
+        updated_by: req.user!.id,
+      });
       sendSuccess(res, 'Policy updated', policy);
     } catch (err) { next(err); }
   }
@@ -450,7 +484,15 @@ export class AmenityController {
       const amenity = await Amenity.findByPk(req.params.id);
       if (!amenity) { sendNotFound(res, 'Amenity not found'); return; }
       const image = req.file ? getRelativePath(req.file.path) : undefined;
-      await amenity.update({ ...req.body, ...(image ? { image } : {}) });
+      const { name, description, category, timing_open, timing_close } = req.body;
+      await amenity.update({
+        ...(name          !== undefined ? { name }                              : {}),
+        ...(description   !== undefined ? { description: description || null }  : {}),
+        ...(category      !== undefined ? { category }                          : {}),
+        ...(timing_open   !== undefined ? { timing_open:  timing_open  || null } : {}),
+        ...(timing_close  !== undefined ? { timing_close: timing_close || null } : {}),
+        ...(image                       ? { image }                             : {}),
+      });
       sendSuccess(res, 'Amenity updated', amenity);
     } catch (err) { next(err); }
   }

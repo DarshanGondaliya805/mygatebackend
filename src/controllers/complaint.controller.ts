@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { Complaint, User } from '../models';
-import { sendSuccess, sendCreated, sendNotFound, getPagination, getPaginationMeta } from '../utils/response';
+import { sendSuccess, sendCreated, sendNotFound, sendError, getPagination, getPaginationMeta } from '../utils/response';
 import { getRelativePath } from '../utils/upload';
 import notificationService from '../services/notification.service';
 
@@ -52,6 +52,12 @@ export class ComplaintController {
       if (!complaint) { sendNotFound(res, 'Complaint not found'); return; }
 
       const { status, admin_note, assigned_to } = req.body;
+
+      const validStatuses = ['open', 'in_progress', 'resolved', 'closed', 'rejected'];
+      if (!validStatuses.includes(status)) {
+        sendError(res, `Invalid status. Must be one of: ${validStatuses.join(', ')}`, 400);
+        return;
+      }
 
       await complaint.update({
         status,

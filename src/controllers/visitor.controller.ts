@@ -133,6 +133,11 @@ export class VisitorController {
     try {
       const { status } = req.body;
 
+      if (!['approved', 'rejected'].includes(status)) {
+        res.status(400).json({ success: false, message: 'Status must be approved or rejected' });
+        return;
+      }
+
       const log = await VisitorLog.findByPk(req.params.id, {
         include: [{ model: Visitor, as: 'visitor' }],
       });

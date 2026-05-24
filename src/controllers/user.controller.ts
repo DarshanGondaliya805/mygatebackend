@@ -270,19 +270,52 @@ export class UserController {
 
   async delete(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const user = await User.unscoped().findByPk(req.params.id);
-      if (!user) { sendNotFound(res, 'User not found'); return; }
+      const target = await User.unscoped().findByPk(req.params.id);
+      if (!target) { sendNotFound(res, 'User not found'); return; }
+
+      const callerRole    = req.user!.role;
+      const callerSociety = req.user!.society_id;
+      const targetRole    = target.role;
+
+      // Nobody can delete a super_admin
+      if (targetRole === 'super_admin') {
+        sendError(res, 'Super admin cannot be deleted', 403);
+        return;
+      }
+
+      // Admin can only delete residents (role = user) within their own society
+      if (callerRole === 'admin') {
+        if (targetRole !== 'user') {
+          sendError(res, 'Admin can only delete residents', 403);
+          return;
+        }
+        if (target.society_id !== callerSociety) {
+          sendError(res, 'You can only delete residents of your own society', 403);
+          return;
+        }
+      }
 
       // Free up unique-constrained fields before soft-delete so the same
       // email / phone can be re-registered immediately after deletion.
+      // • phone is VARCHAR(15) → keep tombstone short: "d{id}" (max 11 chars, always unique)
+      // • Use class-level User.update() with hooks:false to bypass ALL model validators/hooks
       const ts = Date.now();
-      await user.update({
-        phone: `deleted_${user.id}_${ts}`,
-        email: user.email ? `deleted_${user.id}_${ts}@deleted.invalid` : null,
-      });
+      await User.update(
+        {
+          phone: `d${target.id}`,
+          email: target.email ? `d${target.id}x${ts}@d.co` : null,
+        },
+        {
+          where: { id: target.id },
+          validate: false,
+          hooks: false,
+          silent: true,
+        } as any,
+      );
 
-      await user.destroy();
-      sendSuccess(res, 'User deleted');
+      await target.reload();   // sync instance state before destroy
+      await target.destroy();
+      sendSuccess(res, `${targetRole === 'admin' ? 'Admin' : 'Resident'} deleted successfully`);
     } catch (err) {
       next(err);
     }
