@@ -143,10 +143,16 @@ export class VisitorController {
       });
       if (!log) { sendNotFound(res, 'Visitor log not found'); return; }
 
+      // Guard: prevent re-processing an already resolved log — avoids duplicate
+      // notifications when multiple residents tap approve/reject at the same time
+      if (log.status === 'approved' || log.status === 'rejected') {
+        res.status(400).json({ success: false, message: `Visitor is already ${log.status}` });
+        return;
+      }
+
       await log.update({
         status,
         host_user_id: req.user!.id,
-        ...(status === 'checked_out' ? { out_time: new Date() } : {}),
       });
 
       const visitor = (log as any).visitor as Visitor;
@@ -174,7 +180,7 @@ export class VisitorController {
         triggered_by: 'resident',
       };
 
-      // Notify the resident/user who created the entry
+      // Notify the resident/user who created the entry (if created by a resident)
       if (log.created_by) {
         logger.info(`[updateStatus] notifying resident created_by=${log.created_by}`);
         await notificationService.send({
@@ -188,13 +194,9 @@ export class VisitorController {
         await notificationService.sendDataToUser(log.created_by, fcmData);
       }
 
-      // Notify the security staff who created the entry
-      if (log.created_by_staff) {
-        logger.info(`[updateStatus] notifying security staff created_by_staff=${log.created_by_staff}`);
-        await notificationService.sendAlertToStaff(log.created_by_staff, statusTitle, statusBody, fcmData);
-      }
-
-      // Broadcast status update to ALL security guards in the society
+      // Broadcast status update to ALL security guards in the society (one notification each).
+      // This already covers the specific guard who created the entry — no separate
+      // sendAlertToStaff call needed (that was causing the creating guard to receive 2 notifications).
       await notificationService.sendAlertToSocietySecurity(log.society_id, statusTitle, statusBody, fcmData);
 
       sendSuccess(res, `Visitor ${status} successfully`, log);
