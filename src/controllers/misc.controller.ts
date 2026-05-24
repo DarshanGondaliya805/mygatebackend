@@ -66,12 +66,17 @@ export class StaffController {
       const image     = files?.image?.[0]  ? getRelativePath(files.image[0].path) : undefined;
       const documents = files?.documents   ? files.documents.map((f) => getRelativePath(f.path)) : undefined;
 
-      // Explicitly pick allowed editable fields (never touch society_id / created_by / uuid)
+      // Explicitly pick allowed editable fields
       const {
         name, phone, email, password,
         dob, gender, staff_type,
         salary, salary_type, address, joining_date,
+        society_id,
       } = req.body;
+
+      // Super admin can optionally move staff to a different society; others keep current
+      const targetSocietyId =
+        req.user!.role === 'super_admin' && society_id ? society_id : undefined;
 
       await staff.update({
         name, phone, email,
@@ -81,6 +86,7 @@ export class StaffController {
         salary_type:  salary_type  || undefined,
         address:      address      || null,
         joining_date: joining_date || null,
+        ...(targetSocietyId !== undefined ? { society_id: targetSocietyId } : {}),  // keep existing if not sent
         ...(staff_type !== undefined ? { staff_type } : {}),  // keep existing if not sent
         ...(password  ? { password }  : {}),   // only update if provided — beforeSave hook hashes it
         ...(image     ? { image }     : {}),   // keep existing image if none uploaded
