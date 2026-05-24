@@ -31,8 +31,9 @@ const staffUpdateValidation = [
   body('password')
     .optional({ checkFalsy: true })
     .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  // staff_type is optional on update — only validated when provided
   body('staff_type')
-    .notEmpty().withMessage('Staff type is required')
+    .optional({ checkFalsy: true })
     .isIn(['security', 'cleaning', 'gardening', 'maintenance', 'electrician', 'plumber', 'lift_operator', 'other'])
     .withMessage('Invalid staff type'),
 ];

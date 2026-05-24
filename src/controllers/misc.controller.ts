@@ -77,11 +77,11 @@ export class StaffController {
         name, phone, email,
         dob:          dob          || null,
         gender:       gender       || null,
-        staff_type,
         salary:       salary       || null,
         salary_type:  salary_type  || undefined,
         address:      address      || null,
         joining_date: joining_date || null,
+        ...(staff_type !== undefined ? { staff_type } : {}),  // keep existing if not sent
         ...(password  ? { password }  : {}),   // only update if provided — beforeSave hook hashes it
         ...(image     ? { image }     : {}),   // keep existing image if none uploaded
         ...(documents ? { documents } : {}),   // keep existing documents if none uploaded
