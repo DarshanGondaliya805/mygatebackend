@@ -59,7 +59,12 @@ export class AuthService {
     const accessToken = generateAccessToken(staffPayload);
     const refreshToken = generateRefreshToken(staffPayload);
 
-    if (fcmToken) await staff.update({ fcm_token: fcmToken });
+    if (fcmToken) {
+      await staff.update({ fcm_token: fcmToken });
+    } else {
+      // App did not send fcm_token — token stays null, push notifications will not reach this staff
+      console.warn(`[Auth] Staff id=${staff.id} logged in WITHOUT fcm_token — notifications will fail`);
+    }
 
     const { id, uuid, name, email, phone, staff_type,society_id } = (staff as any).dataValues;
     return { accessToken, refreshToken, user: { id, uuid, name: name ?? '', email: email ?? '', phone: phone ?? '', role: 'security', staff_type, source: 'staff', society_id: society_id } };

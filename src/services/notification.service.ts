@@ -123,7 +123,15 @@ export class NotificationService {
   ): Promise<void> {
     try {
       const staff = await Staff.unscoped().findByPk(staffId, { attributes: ['fcm_token'] });
-      if (staff?.fcm_token) await this.sendFCMCombined([staff.fcm_token], title, body, data);
+      if (!staff) {
+        logger.warn(`[FCM] sendAlertToStaff: staff_id=${staffId} not found`);
+        return;
+      }
+      if (!staff.fcm_token) {
+        logger.warn(`[FCM] sendAlertToStaff: staff_id=${staffId} has no FCM token — notification not sent`);
+        return;
+      }
+      await this.sendFCMCombined([staff.fcm_token], title, body, data);
     } catch (err) {
       logger.warn(`[FCM] sendAlertToStaff failed for staff ${staffId}:`, err);
     }

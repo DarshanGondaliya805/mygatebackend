@@ -138,27 +138,32 @@ export class VisitorController {
         return;
       }
 
+      // Atomic update: only update if status is still 'pending'.
+      // This prevents race conditions when multiple residents tap approve/reject
+      // at the same time — only the first DB write succeeds, others get 0 affectedRows.
+      const [affectedRows] = await VisitorLog.update(
+        { status, host_user_id: req.user!.id },
+        { where: { id: req.params.id, status: 'pending' } }
+      );
+
+      if (affectedRows === 0) {
+        // Either log not found, or already processed by another resident
+        const existing = await VisitorLog.findByPk(req.params.id);
+        if (!existing) { sendNotFound(res, 'Visitor log not found'); return; }
+        res.status(400).json({ success: false, message: `Visitor is already ${existing.status}` });
+        return;
+      }
+
+      // Fetch full log with visitor details for notification
       const log = await VisitorLog.findByPk(req.params.id, {
         include: [{ model: Visitor, as: 'visitor' }],
       });
       if (!log) { sendNotFound(res, 'Visitor log not found'); return; }
 
-      // Guard: prevent re-processing an already resolved log — avoids duplicate
-      // notifications when multiple residents tap approve/reject at the same time
-      if (log.status === 'approved' || log.status === 'rejected') {
-        res.status(400).json({ success: false, message: `Visitor is already ${log.status}` });
-        return;
-      }
-
-      await log.update({
-        status,
-        host_user_id: req.user!.id,
-      });
-
       const visitor = (log as any).visitor as Visitor;
 
       logger.info(
-        `[updateStatus] log_id=${log.id} new_status=${log.status} ` +
+        `[updateStatus] log_id=${log.id} new_status=${status} ` +
         `created_by=${log.created_by} created_by_staff=${log.created_by_staff} ` +
         `society_id=${log.society_id}`
       );
@@ -166,13 +171,12 @@ export class VisitorController {
       const statusTitle = `Visitor ${status === 'approved' ? 'Approved ✅' : 'Rejected ❌'}`;
       const statusBody  = `${visitor?.name}'s entry has been ${status} by the resident.`;
 
-      // FCM data payload for real-time update on security app
       const fcmData: Record<string, string> = {
         type: 'visitor_status_update',
         log_id: s(log.id),
         visitor_id: s(log.visitor_id),
         name: s(visitor?.name),
-        status: s(log.status),
+        status,
         flat_id: s(log.flat_id),
         society_id: s(log.society_id),
         out_time: s(log.out_time),
@@ -181,7 +185,10 @@ export class VisitorController {
 
       // Notify only the security guard who created this visitor request (not all staff).
       if (log.created_by_staff) {
+        logger.info(`[updateStatus] Sending notification to staff_id=${log.created_by_staff}`);
         await notificationService.sendAlertToStaff(log.created_by_staff, statusTitle, statusBody, fcmData);
+      } else {
+        logger.warn(`[updateStatus] log_id=${log.id} has no created_by_staff — notification skipped`);
       }
 
       sendSuccess(res, `Visitor ${status} successfully`, log);
