@@ -130,6 +130,10 @@ export class VisitorController {
 
   // PUT /:id/status — User approves / rejects a visitor log entry
   async updateStatus(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    // Unique ID per request call — if this appears 3 times in logs, the app is calling the API 3 times
+    const reqId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    logger.info(`[updateStatus][${reqId}] ▶ START log_id=${req.params.id} user_id=${req.user!.id} status=${req.body.status}`);
+
     try {
       const { status } = req.body;
 
@@ -138,18 +142,20 @@ export class VisitorController {
         return;
       }
 
-      // Atomic update: only update if status is still 'pending'.
-      // This prevents race conditions when multiple residents tap approve/reject
-      // at the same time — only the first DB write succeeds, others get 0 affectedRows.
+      // Atomic update — only succeeds if status is still 'pending'.
+      // If 3 users tap approve at the same time, MySQL row-lock ensures only
+      // the first UPDATE matches; the other 2 get affectedRows=0 and are blocked here.
       const [affectedRows] = await VisitorLog.update(
         { status, host_user_id: req.user!.id },
         { where: { id: req.params.id, status: 'pending' } }
       );
 
+      logger.info(`[updateStatus][${reqId}] affectedRows=${affectedRows} for log_id=${req.params.id}`);
+
       if (affectedRows === 0) {
-        // Either log not found, or already processed by another resident
         const existing = await VisitorLog.findByPk(req.params.id);
         if (!existing) { sendNotFound(res, 'Visitor log not found'); return; }
+        logger.warn(`[updateStatus][${reqId}] BLOCKED — already ${existing.status}, no notification sent`);
         res.status(400).json({ success: false, message: `Visitor is already ${existing.status}` });
         return;
       }
@@ -161,12 +167,6 @@ export class VisitorController {
       if (!log) { sendNotFound(res, 'Visitor log not found'); return; }
 
       const visitor = (log as any).visitor as Visitor;
-
-      logger.info(
-        `[updateStatus] log_id=${log.id} new_status=${status} ` +
-        `created_by=${log.created_by} created_by_staff=${log.created_by_staff} ` +
-        `society_id=${log.society_id}`
-      );
 
       const statusTitle = `Visitor ${status === 'approved' ? 'Approved ✅' : 'Rejected ❌'}`;
       const statusBody  = `${visitor?.name}'s entry has been ${status} by the resident.`;
@@ -183,14 +183,14 @@ export class VisitorController {
         triggered_by: 'resident',
       };
 
-      // Notify only the security guard who created this visitor request (not all staff).
       if (log.created_by_staff) {
-        logger.info(`[updateStatus] Sending notification to staff_id=${log.created_by_staff}`);
+        logger.info(`[updateStatus][${reqId}] ✅ Sending 1 notification to staff_id=${log.created_by_staff}`);
         await notificationService.sendAlertToStaff(log.created_by_staff, statusTitle, statusBody, fcmData);
       } else {
-        logger.warn(`[updateStatus] log_id=${log.id} has no created_by_staff — notification skipped`);
+        logger.warn(`[updateStatus][${reqId}] ⚠ no created_by_staff on log_id=${log.id} — skipped`);
       }
 
+      logger.info(`[updateStatus][${reqId}] ✔ DONE`);
       sendSuccess(res, `Visitor ${status} successfully`, log);
     } catch (err) {
       next(err);

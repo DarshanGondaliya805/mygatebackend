@@ -58,6 +58,8 @@ export class NotificationService {
    */
   private async sendFCMData(tokens: string[], data: Record<string, string>): Promise<void> {
     if (tokens.length === 0) return;
+    // ── This log tells us exactly how many FCM sends happen per request ──────
+    logger.info(`[FCM][sendFCMData] called — type=${data.type} tokens=${tokens.length} stack=${new Error().stack?.split('\n')[2]?.trim()}`);
     const base = {
       data,
       android: { priority: 'high' as const },
@@ -68,7 +70,7 @@ export class NotificationService {
     } else {
       await admin.messaging().sendEachForMulticast({ tokens, ...base });
     }
-    logger.info(`[FCM] Data msg type=${data.type} → ${tokens.length} token(s)`);
+    logger.info(`[FCM][sendFCMData] ✅ sent type=${data.type} → ${tokens.length} token(s)`);
   }
 
   /**
@@ -114,7 +116,14 @@ export class NotificationService {
   // Security staff may have their app killed, so we always send notification+data
   // together so the OS guarantees tray delivery regardless of app state.
 
-  /** Combined notification+data to a single security staff member. */
+  /**
+   * Data-only message to a single security staff member.
+   * We send data-only (no notification field) so the OS does NOT auto-display
+   * a system tray notification. The app's onMessage / onBackgroundMessage handler
+   * shows exactly ONE local notification — preventing the 3× duplicate that happens
+   * when notification+data are combined (system tray + background handler + foreground handler).
+   * title and body are passed inside the data payload so the app can use them.
+   */
   async sendAlertToStaff(
     staffId: number,
     title: string,
@@ -131,13 +140,19 @@ export class NotificationService {
         logger.warn(`[FCM] sendAlertToStaff: staff_id=${staffId} has no FCM token — notification not sent`);
         return;
       }
-      await this.sendFCMCombined([staff.fcm_token], title, body, data);
+      // Include title + body inside data so the app can display them in the local notification
+      const payload = { ...data, title, body };
+      await this.sendFCMData([staff.fcm_token], payload);
+      logger.info(`[FCM] Data-only alert → staff_id=${staffId}: ${title}`);
     } catch (err) {
       logger.warn(`[FCM] sendAlertToStaff failed for staff ${staffId}:`, err);
     }
   }
 
-  /** Combined notification+data to ALL active security staff in a society. */
+  /**
+   * Data-only message to ALL active security staff in a society.
+   * Same reasoning as sendAlertToStaff — data-only prevents 3× duplicate notifications.
+   */
   async sendAlertToSocietySecurity(
     societyId: number,
     title: string,
@@ -149,8 +164,17 @@ export class NotificationService {
         where: { society_id: societyId, is_active: true },
         attributes: ['fcm_token'],
       });
-      const tokens = staffList.map((s) => s.fcm_token).filter((t): t is string => !!t);
-      if (tokens.length > 0) await this.sendFCMCombined(tokens, title, body, data);
+      // Deduplicate tokens — same device logged in under multiple accounts gets only 1 message
+      const tokens = [...new Set(
+        staffList.map((s) => s.fcm_token).filter((t): t is string => !!t)
+      )];
+      if (tokens.length > 0) {
+        const payload = { ...data, title, body };
+        await this.sendFCMData(tokens, payload);
+        logger.info(`[FCM] Data-only alert → ${tokens.length} security token(s) in society ${societyId}: ${title}`);
+      } else {
+        logger.warn(`[FCM] sendAlertToSocietySecurity: no active tokens for society ${societyId}`);
+      }
     } catch (err) {
       logger.warn(`[FCM] sendAlertToSocietySecurity failed for society ${societyId}:`, err);
     }
