@@ -179,8 +179,10 @@ export class VisitorController {
         triggered_by: 'resident',
       };
 
-      // Send exactly ONE notification — broadcast to all security guards in the society.
-      await notificationService.sendAlertToSocietySecurity(log.society_id, statusTitle, statusBody, fcmData);
+      // Notify only the security guard who created this visitor request (not all staff).
+      if (log.created_by_staff) {
+        await notificationService.sendAlertToStaff(log.created_by_staff, statusTitle, statusBody, fcmData);
+      }
 
       sendSuccess(res, `Visitor ${status} successfully`, log);
     } catch (err) {
