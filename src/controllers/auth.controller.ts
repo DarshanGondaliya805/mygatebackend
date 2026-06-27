@@ -3,6 +3,7 @@ import { AuthRequest } from '../middlewares/auth.middleware';
 import authService from '../services/auth.service';
 import { User, Staff, Flat, Block, Society } from '../models';
 import { sendSuccess, sendError, sendNotFound } from '../utils/response';
+import logger from '../utils/logger';
 
 export class AuthController {
   async login(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -40,6 +41,27 @@ export class AuthController {
       await authService.changePassword(req.user!.id, old_password, new_password);
       sendSuccess(res, 'Password changed successfully');
     } catch (err) {
+      next(err);
+    }
+  }
+
+  async updateFcmToken(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { fcm_token } = req.body;
+      if (typeof fcm_token !== 'string' || fcm_token.trim() === '') {
+        sendError(res, 'fcm_token is required', 400);
+        return;
+      }
+
+      if (req.user!.source === 'staff') {
+        await Staff.update({ fcm_token }, { where: { id: req.user!.id } });
+      } else {
+        await User.update({ fcm_token }, { where: { id: req.user!.id } });
+      }
+
+      sendSuccess(res, 'FCM token updated successfully');
+    } catch (err) {
+      logger.error(`[updateFcmToken] Failed for ${req.user?.source} id=${req.user?.id}: ${err}`);
       next(err);
     }
   }

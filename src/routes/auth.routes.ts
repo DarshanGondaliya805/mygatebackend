@@ -20,6 +20,10 @@ const changePasswordValidation = [
   body('new_password').isLength({ min: 8 }).withMessage('Min 8 characters'),
 ];
 
+const fcmTokenValidation = [
+  body('fcm_token').isString().trim().notEmpty().withMessage('fcm_token is required'),
+];
+
 // Public routes
 router.post('/login', validate(loginValidation), authController.login.bind(authController));
 router.post('/refresh', validate(refreshValidation), authController.refreshToken.bind(authController));
@@ -29,5 +33,6 @@ router.use(authenticate);
 router.post('/logout', authController.logout.bind(authController));
 router.get('/me', authController.me.bind(authController));
 router.put('/change-password', validate(changePasswordValidation), authController.changePassword.bind(authController));
+router.post('/fcm-token', validate(fcmTokenValidation), authController.updateFcmToken.bind(authController));
 
 export default router;

@@ -3,7 +3,8 @@
     "allow": [
       "Bash(dir \"C:\\\\Trump\\\\darshan\\\\mygate2\\\\mygate-backend\\\\mygate-backend\\\\logs\")",
       "Bash(powershell -Command \"Get-Content 'C:\\\\Trump\\\\darshan\\\\mygate2\\\\mygate-backend\\\\mygate-backend\\\\logs\\\\app.log' | Select-Object -Last 80\")",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(npx sequelize-cli *)"
     ]
   }
 }
