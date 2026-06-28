@@ -48,6 +48,7 @@ export class AuthController {
   async updateFcmToken(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { fcm_token } = req.body;
+      console.log('fcm token----------------------------------', fcm_token);
       if (typeof fcm_token !== 'string' || fcm_token.trim() === '') {
         sendError(res, 'fcm_token is required', 400);
         return;
