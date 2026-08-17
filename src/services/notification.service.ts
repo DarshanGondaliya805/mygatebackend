@@ -14,7 +14,10 @@ interface SendNotificationPayload {
 
 export class NotificationService {
   // ── Display notification + DB record (residents / users) ──────────────────
-  async send(payload: SendNotificationPayload): Promise<void> {
+  // Pass { skipPush: true } when a data-only FCM message is already being sent
+  // for the same event, so the resident doesn't get two tray notifications —
+  // the DB record is still created for the in-app notification inbox.
+  async send(payload: SendNotificationPayload, options?: { skipPush?: boolean }): Promise<void> {
     await Notification.create({
       user_id: payload.user_id,
       title: payload.title,
@@ -23,6 +26,8 @@ export class NotificationService {
       reference_id: payload.reference_id ?? null,
       reference_type: payload.reference_type ?? null,
     });
+
+    if (options?.skipPush) return;
 
     try {
       const user = await User.findByPk(payload.user_id, { attributes: ['fcm_token'] });
@@ -34,8 +39,12 @@ export class NotificationService {
     }
   }
 
-  async sendToMany(userIds: number[], payload: Omit<SendNotificationPayload, 'user_id'>): Promise<void> {
-    await Promise.allSettled(userIds.map((id) => this.send({ ...payload, user_id: id })));
+  async sendToMany(
+    userIds: number[],
+    payload: Omit<SendNotificationPayload, 'user_id'>,
+    options?: { skipPush?: boolean },
+  ): Promise<void> {
+    await Promise.allSettled(userIds.map((id) => this.send({ ...payload, user_id: id }, options)));
   }
 
   // ── Low-level FCM senders ─────────────────────────────────────────────────
