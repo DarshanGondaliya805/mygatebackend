@@ -98,10 +98,7 @@ export class VisitorController {
           reference_type: 'visitor' as const,
         };
 
-        // skipPush: the data-only FCM message below already triggers the resident's
-        // tray notification (app-formatted "New Visitor"); sending a raw notification
-        // here too would show a second, server-formatted "Visitor at Gate" tray entry.
-        await notificationService.sendToMany(residents.map((r) => r.id), notifPayload, { skipPush: true });
+        await notificationService.sendToMany(residents.map((r) => r.id), notifPayload);
 
         // Send real-time data message so the app can show the visitor request instantly
         const fcmData: Record<string, string> = {
