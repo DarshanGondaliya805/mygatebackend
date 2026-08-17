@@ -67,6 +67,15 @@ export class AuthController {
     }
   }
 
+  async deleteMe(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      await authService.deleteAccount(req.user!.id, req.user!.source);
+      sendSuccess(res, 'Account deleted successfully');
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async me(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       // ── Security staff — return plain staff profile (no flat/block) ───────

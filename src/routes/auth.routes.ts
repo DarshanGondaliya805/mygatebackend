@@ -32,6 +32,7 @@ router.post('/refresh', validate(refreshValidation), authController.refreshToken
 router.use(authenticate);
 router.post('/logout', authController.logout.bind(authController));
 router.get('/me', authController.me.bind(authController));
+router.delete('/me', authController.deleteMe.bind(authController));
 router.put('/change-password', validate(changePasswordValidation), authController.changePassword.bind(authController));
 router.post('/fcm-token', validate(fcmTokenValidation), authController.updateFcmToken.bind(authController));
 
